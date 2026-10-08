@@ -6,7 +6,7 @@ export const TRACK_COLORS: Record<TrackState, string> = {
   tracking: 'var(--success)',
   idle: 'var(--warning)',
   paused: 'var(--faint)',
-  ignored: 'var(--faint)',
+  untracked: 'var(--faint)',
   unavailable: 'var(--danger)',
 };
 

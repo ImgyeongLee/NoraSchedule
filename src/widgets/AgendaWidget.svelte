@@ -2,11 +2,12 @@
   import { CalendarCheck, Leaf, Plus, Target } from '@lucide/svelte';
   import EventModal from '../pages/EventModal.svelte';
   import { api, type CalEvent, type DDay } from '../lib/api';
-  import { DEFAULT_COLOR, hex } from '../lib/colors';
+  import { DEFAULT_COLOR, hex, textOn } from '../lib/colors';
   import { addMinutes, covers, isAllDayLane, pad, timeOf, toDateTime, today } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
   import { data, load, openCalendar } from '../lib/state.svelte';
-  import { copyEvent, copyOnHover, eventMenu, pasteAsEvent, pasteOnHover } from '../lib/clipboard.svelte';
+  import { eventMenu, pasteAsEvent, pasteOnHover } from '../lib/clipboard.svelte';
+  import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
 
   let events = $state<CalEvent[]>([]);
@@ -23,7 +24,7 @@
   function addEvent() {
     const now = new Date();
     const start = toDateTime(today(), `${pad(Math.min(22, now.getHours() + 1))}:00`);
-    editing = { id: 0, title: '', start, end: addMinutes(start, 60), all_day: false, color: DEFAULT_COLOR, location: '', links: [], memo: '', repeat: null, exdates: [], occurrence: null };
+    editing = { id: 0, title: '', start, end: addMinutes(start, 60), all_day: false, color: DEFAULT_COLOR, location: '', links: [], memo: '', repeat: null, exdates: [], occurrence: null, cancelled: false, tags: [], reminder: null };
   }
 </script>
 
@@ -39,14 +40,15 @@
     {/each}
     {#each events as e (`${e.id}-${e.occurrence}`)}
       <button
-        class="item"
+        class="item event-block"
+        class:cancelled={e.cancelled}
         style:--c={hex(e.color)}
+        style:--on-c={textOn(e.color)}
         onclick={() => (editing = e)}
-        {...copyOnHover(() => copyEvent(e))}
+        {...eventHover(e)}
         oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => (editing = e)))}
       >
         <span class="time tabular">{isAllDayLane(e) ? t('common.allDay') : timeOf(e.start)}</span>
-        <span class="bar"></span>
         <span class="title truncate">{e.title}</span>
       </button>
     {:else}
@@ -69,24 +71,14 @@
     margin-bottom: 6px;
     border: none;
     border-radius: 12px;
-    background: color-mix(in srgb, var(--c) 10%, var(--surface));
     text-align: left;
     cursor: pointer;
-  }
-  .item:hover {
-    background: color-mix(in srgb, var(--c) 18%, var(--surface));
   }
   .time {
     font-size: 12px;
     font-weight: 650;
-    color: var(--muted);
+    opacity: 0.85;
     min-width: 42px;
-  }
-  .bar {
-    width: 3px;
-    align-self: stretch;
-    border-radius: 3px;
-    background: var(--c);
   }
   .title {
     font-weight: 600;

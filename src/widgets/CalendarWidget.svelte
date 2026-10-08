@@ -24,6 +24,6 @@
     <button class="w-title" onclick={() => openCalendar(today())}><span class="w-icon"><CalendarDays size={15} /></span>{t('w.calendar')}</button>
   </div>
   <div class="w-body">
-    <MiniCalendar selected={today()} onpick={openCalendar} {marks} />
+    <MiniCalendar selected={today()} onpick={openCalendar} {marks} {events} />
   </div>
 </div>

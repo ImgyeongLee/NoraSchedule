@@ -3,7 +3,8 @@
 //! A dedicated thread samples the focused application/window once per second and
 //! records contiguous focus "segments" into the `activity` table. Browser tabs are
 //! captured through the window title, which browsers set to the active tab's title.
-//! Time is not counted while paused, while the user is idle, or for ignored apps.
+//! Only apps on the user's tracked list are recorded, and time is not counted while
+//! paused or while the user is idle.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -18,6 +19,7 @@ use crate::db;
 const MAX_TITLE_LEN: usize = 300;
 /// Samples further apart than this (e.g. after system sleep) start a new segment.
 const MAX_GAP_SECS: i64 = 3;
+const MAX_RECENT_APPS: usize = 12;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,7 +29,8 @@ pub enum TrackState {
     Tracking,
     Idle,
     Paused,
-    Ignored,
+    /// The focused app is not on the tracked list.
+    Untracked,
     Unavailable,
 }
 
@@ -38,13 +41,16 @@ pub struct TrackerStatus {
     pub title: String,
     /// How long the current app/window has been focused, in seconds.
     pub segment_secs: i64,
+    /// Apps focused recently (most recent first), offered as suggestions for the tracked list.
+    pub recent_apps: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrackerSettings {
     pub paused: bool,
     pub idle_threshold_secs: u64,
-    pub ignored_apps: Vec<String>,
+    /// Apps whose time is recorded; every other app is skipped.
+    pub tracked_apps: Vec<String>,
 }
 
 impl TrackerSettings {
@@ -52,8 +58,8 @@ impl TrackerSettings {
         Self {
             paused: db.setting_or("tracker.paused", false),
             idle_threshold_secs: db.setting_or("tracker.idle_secs", 300),
-            ignored_apps: db
-                .setting("tracker.ignored")
+            tracked_apps: db
+                .setting("tracker.apps")
                 .ok()
                 .flatten()
                 .map(|s| s.lines().map(str::to_owned).filter(|l| !l.is_empty()).collect())
@@ -64,7 +70,7 @@ impl TrackerSettings {
     pub fn save(&self, db: &db::Db) -> db::DbResult<()> {
         db.set_setting("tracker.paused", &self.paused.to_string())?;
         db.set_setting("tracker.idle_secs", &self.idle_threshold_secs.to_string())?;
-        db.set_setting("tracker.ignored", &self.ignored_apps.join("\n"))
+        db.set_setting("tracker.apps", &self.tracked_apps.join("\n"))
     }
 }
 
@@ -73,8 +79,9 @@ pub struct TrackerShared {
     pub paused: AtomicBool,
     /// 0 disables idle detection.
     pub idle_threshold_secs: AtomicU64,
-    pub ignored_apps: Mutex<Vec<String>>,
+    pub tracked_apps: Mutex<Vec<String>>,
     pub status: Mutex<TrackerStatus>,
+    recent_apps: Mutex<Vec<String>>,
 }
 
 impl TrackerShared {
@@ -82,20 +89,33 @@ impl TrackerShared {
         TrackerSettings {
             paused: self.paused.load(Ordering::Relaxed),
             idle_threshold_secs: self.idle_threshold_secs.load(Ordering::Relaxed),
-            ignored_apps: self.ignored_apps.lock().map(|l| l.clone()).unwrap_or_default(),
+            tracked_apps: self.tracked_apps.lock().map(|l| l.clone()).unwrap_or_default(),
         }
     }
 
     pub fn apply(&self, settings: TrackerSettings) {
         self.paused.store(settings.paused, Ordering::Relaxed);
         self.idle_threshold_secs.store(settings.idle_threshold_secs, Ordering::Relaxed);
-        if let Ok(mut list) = self.ignored_apps.lock() {
-            *list = settings.ignored_apps;
+        if let Ok(mut list) = self.tracked_apps.lock() {
+            *list = settings.tracked_apps;
         }
     }
 
     pub fn status(&self) -> TrackerStatus {
-        self.status.lock().map(|s| s.clone()).unwrap_or_default()
+        let mut status = self.status.lock().map(|s| s.clone()).unwrap_or_default();
+        status.recent_apps = self.recent_apps.lock().map(|l| l.clone()).unwrap_or_default();
+        status
+    }
+
+    fn note_recent(&self, app: &str) {
+        if let Ok(mut list) = self.recent_apps.lock() {
+            if list.first().is_some_and(|a| a == app) {
+                return;
+            }
+            list.retain(|a| a != app);
+            list.insert(0, app.to_owned());
+            list.truncate(MAX_RECENT_APPS);
+        }
     }
 
     fn set_status(&self, status: TrackerStatus) {
@@ -104,8 +124,8 @@ impl TrackerShared {
         }
     }
 
-    fn is_ignored(&self, app: &str) -> bool {
-        self.ignored_apps
+    fn is_tracked(&self, app: &str) -> bool {
+        self.tracked_apps
             .lock()
             .map(|list| list.iter().any(|a| a.eq_ignore_ascii_case(app)))
             .unwrap_or(false)
@@ -116,8 +136,9 @@ pub fn start(db_path: PathBuf, settings: TrackerSettings) -> Arc<TrackerShared> 
     let shared = Arc::new(TrackerShared {
         paused: AtomicBool::new(settings.paused),
         idle_threshold_secs: AtomicU64::new(settings.idle_threshold_secs),
-        ignored_apps: Mutex::new(settings.ignored_apps),
+        tracked_apps: Mutex::new(settings.tracked_apps),
         status: Mutex::new(TrackerStatus::default()),
+        recent_apps: Mutex::new(Vec::new()),
     });
     let thread_shared = shared.clone();
     let spawned = std::thread::Builder::new()
@@ -147,6 +168,7 @@ fn run(db_path: PathBuf, shared: Arc<TrackerShared>) {
         }
     };
     let mut seg: Option<Segment> = None;
+    let own_exe = std::env::current_exe().ok();
 
     loop {
         std::thread::sleep(Duration::from_secs(1));
@@ -186,10 +208,14 @@ fn run(db_path: PathBuf, shared: Arc<TrackerShared>) {
             win.app_name.trim().to_owned()
         };
         let title: String = win.title.trim().chars().take(MAX_TITLE_LEN).collect();
+        // Nora itself is focused whenever the tracked list is edited, so never suggest it.
+        if own_exe.as_deref() != Some(win.process_path.as_path()) {
+            shared.note_recent(&app);
+        }
 
-        if shared.is_ignored(&app) {
+        if !shared.is_tracked(&app) {
             seg = None;
-            shared.set_status(TrackerStatus { state: TrackState::Ignored, app, title, segment_secs: 0 });
+            shared.set_status(TrackerStatus { state: TrackState::Untracked, app, title, ..Default::default() });
             continue;
         }
 
@@ -215,7 +241,7 @@ fn run(db_path: PathBuf, shared: Arc<TrackerShared>) {
         }
 
         let segment_secs = seg.as_ref().map_or(0, |s| s.last - s.start);
-        shared.set_status(TrackerStatus { state: TrackState::Tracking, app, title, segment_secs });
+        shared.set_status(TrackerStatus { state: TrackState::Tracking, app, title, segment_secs, ..Default::default() });
     }
 }
 

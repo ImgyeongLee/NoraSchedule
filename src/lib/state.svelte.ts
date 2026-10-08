@@ -1,6 +1,7 @@
 // App-wide reactive state: navigation, theme, toasts and a data version counter
 // that pages watch to reload after any change.
 import { api } from './api';
+import { fromHex } from './colors';
 
 export type Page =
   | 'home' | 'calendar' | 'ddays' | 'todos' | 'pomodoro' | 'memos' | 'bookmarks' | 'expenses' | 'tracking' | 'analytics'
@@ -67,6 +68,12 @@ export function applyTheme() {
   const dark = ui.theme === 'dark' || (ui.theme === 'system' && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   document.documentElement.dataset.accent = ui.accent;
+  // Match the native title bar (Windows) to the themed app background.
+  const css = getComputedStyle(document.documentElement);
+  const color = (name: string) => fromHex(css.getPropertyValue(name).trim());
+  const caption = color('--bg');
+  const text = color('--text');
+  if (!Number.isNaN(caption) && !Number.isNaN(text)) api.setTitlebarColors(caption, text, dark).catch(() => {});
 }
 
 export async function setAccent(accent: Accent) {

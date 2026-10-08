@@ -1,19 +1,25 @@
 <script lang="ts">
-  import { CalendarPlus, ChevronLeft, ChevronRight, Leaf, MapPin, Repeat, Target } from '@lucide/svelte';
+  import { CalendarPlus, ChevronLeft, ChevronRight, Leaf, MapPin, Repeat, Settings2, Tags, Target } from '@lucide/svelte';
   import MiniCalendar from '../components/MiniCalendar.svelte';
   import MonthView from './MonthView.svelte';
   import TimeGrid from './TimeGrid.svelte';
   import EventModal from './EventModal.svelte';
   import { api, type CalEvent, type DDay } from '../lib/api';
-  import { DEFAULT_COLOR, hex } from '../lib/colors';
+  import { DEFAULT_COLOR, hex, textOn } from '../lib/colors';
   import {
     addDays, addMonths, covers, ddayLabel, diffDays, eventSpan, fmt, fmtRange, isAllDayLane, monthStart, pad, range, timeOf,
     today, toDateTime, weekStart,
   } from '../lib/dates';
   import { data, load, ui } from '../lib/state.svelte';
   import { t } from '../lib/i18n.svelte';
-  import { copyEvent, copyOnHover, eventMenu, pageTarget, pasteAsEvent } from '../lib/clipboard.svelte';
+  import { eventMenu, pageTarget, pasteAsEvent } from '../lib/clipboard.svelte';
+  import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
+  import { groupedTags, matchesTagFilter, setTagFilter, tagStore, tagsOf, toggleTagFilter } from '../lib/tags.svelte';
+  import TagManager from '../components/TagManager.svelte';
+  import TodoChip from '../components/TodoChip.svelte';
+  import { loadCalendarTodos } from '../lib/calendarTodos';
+  import type { CalTodo } from '../lib/lanes';
 
   type View = 'month' | 'week' | 'day';
   let view = $state<View>('month');
@@ -22,6 +28,7 @@
   let events = $state<CalEvent[]>([]);
   let ddays = $state<DDay[]>([]);
   let editing = $state<CalEvent | null>(null);
+  let todos = $state<CalTodo[]>([]);
 
   const visible = $derived.by((): [string, string] => {
     if (view === 'month') {
@@ -40,6 +47,7 @@
     const [from, to] = visible;
     load(api.eventsBetween(from, to), []).then((e) => (events = e));
     load(api.ddays(), []).then((d) => (ddays = d));
+    loadCalendarTodos().then((x) => (todos = x));
   });
 
   const title = $derived.by(() => {
@@ -49,8 +57,17 @@
     return fmtRange(a, b, { month: a.slice(0, 7) === b.slice(0, 7) ? 'long' : 'short', day: 'numeric' });
   });
 
-  const marks = $derived(new Set(events.flatMap((e) => { const [a, b] = eventSpan(e); return range(a, diffDays(b, a) + 1); })));
-  const agenda = $derived(events.filter((e) => covers(e, cursor)));
+  /** Events passing the tag filter (all of them when no tag is selected). */
+  const shownEvents = $derived(events.filter(matchesTagFilter));
+  const marks = $derived(
+    new Set([
+      ...shownEvents.flatMap((e) => { const [a, b] = eventSpan(e); return range(a, diffDays(b, a) + 1); }),
+      ...todos.flatMap((x) => (x.todo.done || !x.todo.due ? [] : [x.todo.due])),
+    ]),
+  );
+  const agendaTodos = $derived(todos.filter((x) => x.todo.due === cursor));
+  const agenda = $derived(shownEvents.filter((e) => covers(e, cursor)));
+  let managingTags = $state(false);
   const agendaDdays = $derived(ddays.filter((d) => d.date === cursor));
   const upcoming = $derived(ddays.filter((d) => d.date >= today()).slice(0, 4));
 
@@ -74,6 +91,7 @@
       repeat: null,
       exdates: [],
       occurrence: null,
+      cancelled: false, tags: [], reminder: null,
     };
   }
 
@@ -116,12 +134,13 @@
 
     <div class="view">
       {#if view === 'month'}
-        <MonthView {cursor} {events} {ddays} onopen={(e) => (editing = e)} onnew={(d) => newEvent(d)} onday={openDay} onselect={(d) => (cursor = d)} onrange={(a, b) => newRange(a, b)} />
+        <MonthView {cursor} events={shownEvents} {ddays} {todos} onopen={(e) => (editing = e)} onnew={(d) => newEvent(d)} onday={openDay} onselect={(d) => (cursor = d)} onrange={(a, b) => newRange(a, b)} />
       {:else}
         <TimeGrid
           days={view === 'week' ? range(weekStart(cursor), 7) : [cursor]}
-          {events}
+          events={shownEvents}
           {ddays}
+          {todos}
           onopen={(e) => (editing = e)}
           onnew={(d, m) => newEvent(d, m)}
           onday={openDay}
@@ -134,7 +153,7 @@
 
   <aside class="side">
     <div class="card">
-      <MiniCalendar selected={cursor} onpick={(d) => (cursor = d)} {marks} />
+      <MiniCalendar selected={cursor} onpick={(d) => (cursor = d)} {marks} events={shownEvents} />
     </div>
 
     <div class="card agenda">
@@ -144,27 +163,61 @@
       {/each}
       {#each agenda as e (`${e.id}-${e.occurrence}`)}
         <button
-          class="agenda-item"
+          class="agenda-item event-block"
+          class:cancelled={e.cancelled}
           style:--c={hex(e.color)}
+          style:--on-c={textOn(e.color)}
           onclick={() => (editing = e)}
-          {...copyOnHover(() => copyEvent(e))}
+          {...eventHover(e)}
           oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => (editing = e)))}
         >
-          <span class="bar"></span>
           <span class="info">
             <span class="ag-title truncate">{#if e.repeat}<Repeat size={12} />{/if} {e.title}</span>
-            <span class="muted small">{isAllDayLane(e) ? t('common.allDay') : `${timeOf(e.start)} – ${timeOf(e.end)}`}</span>
-            {#if e.location}<span class="faint small row truncate"><MapPin size={12} /> {e.location}</span>{/if}
+            <span class="sub small">{isAllDayLane(e) ? t('common.allDay') : `${timeOf(e.start)} – ${timeOf(e.end)}`}</span>
+            {#if e.location}<span class="sub small row truncate"><MapPin size={12} /> {e.location}</span>{/if}
+            {#if tagsOf(e).length}<span class="sub small truncate">{tagsOf(e).map((tag) => '#' + tag.name).join(' ')}</span>{/if}
           </span>
         </button>
       {:else}
-        {#if agendaDdays.length === 0}
+        {#if agendaDdays.length === 0 && agendaTodos.length === 0}
           <div class="free">
             <span class="leaf"><Leaf size={22} /></span>
             <span class="muted">{t('cal.nothingPlanned')}</span>
             <button class="btn small" onclick={() => newEvent(cursor)}>{t('cal.addSomething')}</button>
           </div>
         {/if}
+      {/each}
+      {#if agendaTodos.length}
+        <div class="faint small todo-head">{t('nav.todos')}</div>
+        {#each agendaTodos as item (item.todo.id)}<TodoChip {item} />{/each}
+      {/if}
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3><Tags size={16} /> {t('tag.title')}</h3>
+        <span class="spacer"></span>
+        {#if tagStore.filter.length}<button class="btn small ghost" onclick={() => setTagFilter([])}>{t('tag.showAll')}</button>{/if}
+        <button class="icon-btn" onclick={() => (managingTags = true)} title={t('tag.manage')} aria-label={t('tag.manage')}><Settings2 size={16} /></button>
+      </div>
+      {#each groupedTags() as group (group.category)}
+        <div class="tag-group">
+          <div class="faint small">{group.category || t('tag.noCategory')}</div>
+          <div class="tag-list">
+            {#each group.tags as tag (tag.id)}
+              <button
+                class="tag-chip"
+                class:on={tagStore.filter.includes(tag.id)}
+                style:--tc={hex(tag.color)}
+                onclick={() => toggleTagFilter(tag.id)}
+                title={t('tag.filterHint')}
+              ><span class="tag-dot"></span>{tag.name}</button>
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <p class="muted small tag-empty">{t('tag.empty')}</p>
+        <button class="btn small" onclick={() => (managingTags = true)}>{t('tag.create')}</button>
       {/each}
     </div>
 
@@ -183,6 +236,10 @@
     {/if}
   </aside>
 </div>
+
+{#if managingTags}
+  <TagManager onclose={() => (managingTags = false)} />
+{/if}
 
 {#if editing}
   <EventModal event={editing} onclose={() => (editing = null)} />
@@ -253,19 +310,11 @@
     padding: 10px;
     border: none;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--c) 10%, var(--surface));
     text-align: left;
     cursor: pointer;
-    transition: background 0.15s;
   }
-  .agenda-item:hover {
-    background: color-mix(in srgb, var(--c) 18%, var(--surface));
-  }
-  .bar {
-    width: 4px;
-    border-radius: 4px;
-    background: var(--c);
-    flex: none;
+  .sub {
+    opacity: 0.85;
   }
   .info {
     display: flex;
@@ -284,6 +333,70 @@
     border: 1.5px dashed color-mix(in srgb, var(--c) 60%, transparent);
     color: var(--c);
     font-weight: 650;
+  }
+  .agenda :global(.todo-chip) {
+    height: 30px;
+    margin: 0;
+    font-size: 13px;
+  }
+  .todo-head {
+    margin-top: 4px;
+  }
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .card-head h3 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tag-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    border: 1.5px solid color-mix(in srgb, var(--tc) 40%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tag-chip:hover {
+    background: color-mix(in srgb, var(--tc) 10%, transparent);
+  }
+  .tag-chip.on {
+    background: var(--tc);
+    border-color: var(--tc);
+    color: #fff;
+  }
+  .tag-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tc);
+  }
+  .tag-chip.on .tag-dot {
+    background: #fff;
+  }
+  .tag-empty {
+    margin-bottom: 8px;
   }
   .free {
     display: flex;

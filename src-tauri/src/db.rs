@@ -29,7 +29,10 @@ CREATE TABLE IF NOT EXISTS events (
     links    TEXT    NOT NULL DEFAULT '',
     memo     TEXT    NOT NULL DEFAULT '',
     repeat   TEXT,
-    exdates  TEXT    NOT NULL DEFAULT '[]'
+    exdates  TEXT    NOT NULL DEFAULT '[]',
+    cancelled INTEGER NOT NULL DEFAULT 0,
+    tags     TEXT    NOT NULL DEFAULT '[]',
+    reminder INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_events_start ON events(start);
 
@@ -113,6 +116,13 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
 
+CREATE TABLE IF NOT EXISTS tags (
+    id       INTEGER PRIMARY KEY,
+    name     TEXT    NOT NULL,
+    color    INTEGER NOT NULL,
+    category TEXT    NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -165,6 +175,24 @@ pub struct Event {
     /// originally falls on. `None` for one-off events and stored rows.
     #[serde(default)]
     pub occurrence: Option<NaiveDate>,
+    /// Called off but kept on the calendar (shown struck through).
+    #[serde(default)]
+    pub cancelled: bool,
+    /// Ids of the tags attached to this event.
+    #[serde(default)]
+    pub tags: Vec<i64>,
+    /// Remind this many minutes before the start; `None` for no reminder.
+    #[serde(default)]
+    pub reminder: Option<i64>,
+}
+
+/// A user-defined label for events, optionally grouped under a category.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Tag {
+    pub id: i64,
+    pub name: String,
+    pub color: u32,
+    pub category: String,
 }
 
 /// Which part of a repeating series an edit or delete applies to.
@@ -177,6 +205,10 @@ pub enum Scope {
 
 fn repeat_json(r: &Option<Repeat>) -> Option<String> {
     r.as_ref().and_then(|r| serde_json::to_string(r).ok())
+}
+
+fn ids_json(ids: &[i64]) -> String {
+    serde_json::to_string(ids).unwrap_or_else(|_| "[]".into())
 }
 
 fn dates_json(d: &[NaiveDate]) -> String {
@@ -302,6 +334,9 @@ fn event_from_row(r: &Row) -> DbResult<Event> {
         repeat: r.get::<_, Option<String>>(9)?.and_then(|s| serde_json::from_str(&s).ok()),
         exdates: serde_json::from_str(&r.get::<_, String>(10)?).unwrap_or_default(),
         occurrence: None,
+        cancelled: r.get(11)?,
+        tags: serde_json::from_str(&r.get::<_, String>(12)?).unwrap_or_default(),
+        reminder: r.get(13)?,
     })
 }
 
@@ -349,6 +384,21 @@ fn migrate(conn: &Connection) -> DbResult<()> {
     if !has_image {
         conn.execute_batch("ALTER TABLE ddays ADD COLUMN image TEXT")?;
     }
+    let has_cancelled = conn
+        .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'cancelled'")?
+        .exists([])?;
+    if !has_cancelled {
+        conn.execute_batch("ALTER TABLE events ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0")?;
+    }
+    let has_tags = conn
+        .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'tags'")?
+        .exists([])?;
+    if !has_tags {
+        conn.execute_batch(
+            "ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+             ALTER TABLE events ADD COLUMN reminder INTEGER;",
+        )?;
+    }
     Ok(())
 }
 
@@ -391,7 +441,7 @@ impl Db {
 
     // ---- events -----------------------------------------------------------
 
-    const EVENT_COLUMNS: &'static str = "id, title, start, end, all_day, color, location, links, memo, repeat, exdates";
+    const EVENT_COLUMNS: &'static str = "id, title, start, end, all_day, color, location, links, memo, repeat, exdates, cancelled, tags, reminder";
 
     fn event(&self, id: i64) -> DbResult<Option<Event>> {
         self.conn
@@ -441,11 +491,13 @@ impl Db {
 
     fn insert_event(&self, e: &Event) -> DbResult<i64> {
         self.conn.execute(
-            "INSERT INTO events(title, start, end, all_day, color, location, links, memo, repeat, exdates)
-             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO events(title, start, end, all_day, color, location, links, memo, repeat, exdates, cancelled,
+             tags, reminder)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 e.title, e.start.format(DT_FMT).to_string(), e.end.format(DT_FMT).to_string(), e.all_day, e.color,
-                e.location, e.links.join("\n"), e.memo, repeat_json(&e.repeat), dates_json(&e.exdates)
+                e.location, e.links.join("\n"), e.memo, repeat_json(&e.repeat), dates_json(&e.exdates), e.cancelled,
+                ids_json(&e.tags), e.reminder
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -454,10 +506,11 @@ impl Db {
     fn update_event_row(&self, e: &Event) -> DbResult<()> {
         self.conn.execute(
             "UPDATE events SET title=?1, start=?2, end=?3, all_day=?4, color=?5, location=?6, links=?7, memo=?8,
-             repeat=?9, exdates=?10 WHERE id=?11",
+             repeat=?9, exdates=?10, cancelled=?11, tags=?12, reminder=?13 WHERE id=?14",
             params![
                 e.title, e.start.format(DT_FMT).to_string(), e.end.format(DT_FMT).to_string(), e.all_day, e.color,
-                e.location, e.links.join("\n"), e.memo, repeat_json(&e.repeat), dates_json(&e.exdates), e.id
+                e.location, e.links.join("\n"), e.memo, repeat_json(&e.repeat), dates_json(&e.exdates), e.cancelled,
+                ids_json(&e.tags), e.reminder, e.id
             ],
         )?;
         Ok(())
@@ -523,6 +576,48 @@ impl Db {
             stored.exdates.retain(|d| *d != day);
             self.conn.execute("UPDATE events SET exdates=?1 WHERE id=?2", params![dates_json(&stored.exdates), id])?;
         }
+        Ok(())
+    }
+
+    // ---- tags -------------------------------------------------------------
+
+    pub fn tags(&self) -> DbResult<Vec<Tag>> {
+        let mut st = self.conn.prepare("SELECT id, name, color, category FROM tags ORDER BY category, name")?;
+        st.query_map([], |r| Ok(Tag { id: r.get(0)?, name: r.get(1)?, color: r.get(2)?, category: r.get(3)? }))?
+            .collect()
+    }
+
+    /// Creates (`id == 0`) or updates a tag. Returns its id.
+    pub fn save_tag(&self, t: &Tag) -> DbResult<i64> {
+        if t.id == 0 {
+            self.conn.execute(
+                "INSERT INTO tags(name, color, category) VALUES(?1, ?2, ?3)",
+                params![t.name, t.color, t.category],
+            )?;
+            return Ok(self.conn.last_insert_rowid());
+        }
+        self.conn.execute(
+            "UPDATE tags SET name=?1, color=?2, category=?3 WHERE id=?4",
+            params![t.name, t.color, t.category, t.id],
+        )?;
+        Ok(t.id)
+    }
+
+    /// Deletes a tag and takes it off every event.
+    pub fn delete_tag(&self, id: i64) -> DbResult<()> {
+        let tagged: Vec<(i64, String)> = self
+            .conn
+            .prepare("SELECT id, tags FROM events WHERE tags != '[]'")?
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<DbResult<_>>()?;
+        for (event_id, json) in tagged {
+            let mut ids: Vec<i64> = serde_json::from_str(&json).unwrap_or_default();
+            if ids.contains(&id) {
+                ids.retain(|t| *t != id);
+                self.conn.execute("UPDATE events SET tags=?1 WHERE id=?2", params![ids_json(&ids), event_id])?;
+            }
+        }
+        self.conn.execute("DELETE FROM tags WHERE id=?1", [id])?;
         Ok(())
     }
 
@@ -895,6 +990,9 @@ pub(crate) mod tests {
             repeat: None,
             exdates: vec![],
             occurrence: None,
+            cancelled: false,
+            tags: vec![],
+            reminder: None,
         };
         db.save_event(&ev("Trip", dt("2026-10-05 00:00"), dt("2026-10-07 00:00"), true), Scope::All).unwrap();
         db.save_event(&ev("Meeting", dt("2026-10-08 23:00"), dt("2026-10-09 00:00"), false), Scope::All).unwrap();
@@ -913,7 +1011,7 @@ pub(crate) mod tests {
             &Event {
                 id: 0, title: "Standup".into(), start: dt(start), end: dt(end), all_day: false, color: 0,
                 location: String::new(), links: vec![], memo: String::new(), repeat: Some(rule), exdates: vec![],
-                occurrence: None,
+                occurrence: None, cancelled: false, tags: vec![], reminder: None,
             },
             Scope::All,
         )

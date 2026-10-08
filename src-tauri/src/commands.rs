@@ -9,7 +9,7 @@ use crate::AppState;
 use crate::backup::{self, Manifest};
 use crate::bookmarks::{Bookmark, BookmarkFolder};
 use crate::expenses::Expense;
-use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, PomodoroSession, Scope, Todo, TodoGroup};
+use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
 
 type CmdResult<T> = Result<T, String>;
@@ -17,6 +17,39 @@ type CmdResult<T> = Result<T, String>;
 fn with_db<T>(state: &State<AppState>, f: impl FnOnce(&crate::db::Db) -> crate::db::DbResult<T>) -> CmdResult<T> {
     let db = state.db.lock().map_err(|_| "database lock poisoned".to_string())?;
     f(&db).map_err(|e| e.to_string())
+}
+
+// ---- window -----------------------------------------------------------------
+
+/// Paints the native title bar in the app theme's colors (`0xRRGGBB`).
+/// Windows 11 only; elsewhere (and on older Windows) this does nothing.
+#[tauri::command]
+pub fn set_titlebar_colors(window: tauri::WebviewWindow, caption: u32, text: u32, dark: bool) -> CmdResult<()> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::ffi::c_void;
+        #[link(name = "dwmapi")]
+        unsafe extern "system" {
+            fn DwmSetWindowAttribute(hwnd: isize, attribute: u32, value: *const c_void, size: u32) -> i32;
+        }
+        const USE_IMMERSIVE_DARK_MODE: u32 = 20;
+        const BORDER_COLOR: u32 = 34;
+        const CAPTION_COLOR: u32 = 35;
+        const TEXT_COLOR: u32 = 36;
+        // COLORREF is 0x00BBGGRR.
+        let colorref = |rgb: u32| ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+        let set = |attribute: u32, value: u32| unsafe {
+            DwmSetWindowAttribute(hwnd, attribute, &value as *const u32 as *const c_void, 4);
+        };
+        set(USE_IMMERSIVE_DARK_MODE, dark as u32);
+        set(CAPTION_COLOR, colorref(caption));
+        set(BORDER_COLOR, colorref(caption));
+        set(TEXT_COLOR, colorref(text));
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = (window, caption, text, dark);
+    Ok(())
 }
 
 // ---- settings ---------------------------------------------------------------
@@ -55,6 +88,28 @@ pub fn delete_event(state: State<AppState>, id: i64, occurrence: Option<NaiveDat
 #[tauri::command]
 pub fn restore_occurrence(state: State<AppState>, id: i64, day: NaiveDate) -> CmdResult<()> {
     with_db(&state, |db| db.restore_occurrence(id, day))
+}
+
+// ---- tags ---------------------------------------------------------------------
+
+#[tauri::command]
+pub fn tags(state: State<AppState>) -> CmdResult<Vec<Tag>> {
+    with_db(&state, |db| db.tags())
+}
+
+#[tauri::command]
+pub fn save_tag(state: State<AppState>, mut tag: Tag) -> CmdResult<i64> {
+    tag.name = tag.name.trim().to_owned();
+    tag.category = tag.category.trim().to_owned();
+    if tag.name.is_empty() {
+        return Err("a tag needs a name".into());
+    }
+    with_db(&state, |db| db.save_tag(&tag))
+}
+
+#[tauri::command]
+pub fn delete_tag(state: State<AppState>, id: i64) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_tag(id))
 }
 
 // ---- d-days -------------------------------------------------------------------
@@ -215,9 +270,9 @@ pub fn tracker_settings(state: State<AppState>) -> TrackerSettings {
 
 #[tauri::command]
 pub fn set_tracker_settings(state: State<AppState>, mut settings: TrackerSettings) -> CmdResult<()> {
-    settings.ignored_apps.retain(|a| !a.trim().is_empty());
-    settings.ignored_apps.sort();
-    settings.ignored_apps.dedup();
+    settings.tracked_apps.retain(|a| !a.trim().is_empty());
+    settings.tracked_apps.sort();
+    settings.tracked_apps.dedup();
     with_db(&state, |db| settings.save(db))?;
     state.tracker.apply(settings);
     Ok(())

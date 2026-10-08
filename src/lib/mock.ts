@@ -2,7 +2,7 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC } from '@tauri-apps/api/mocks';
-import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, PomodoroSession, Todo, TodoGroup } from './api';
+import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, PomodoroSession, Tag, Todo, TodoGroup } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
@@ -51,15 +51,22 @@ export function installMock() {
     repeat: null,
     exdates: [],
     occurrence: null,
+    cancelled: false, tags: [], reminder: null,
   });
   const events: CalEvent[] = [
-    ev('Team standup', 0, '09:30', '10:00', 0x4aa8ff, 'Zoom'),
+    { ...ev('Team standup', 0, '09:30', '10:00', 0x4aa8ff, 'Zoom'), tags: [1], reminder: 10 },
     ev('Design review', 0, '09:45', '11:00', 0xb164e8, 'Room 3'),
     ev('Lunch with 지민', 0, '12:00', '13:00', 0x34c38f, 'Cafe Onion'),
     ev('Gym', 1, '18:00', '19:30', 0xff8a5c),
     ev('Conference', 2, '', '', 0x7c74ff, 'Seoul', 4),
-    ev('Dentist', -2, '15:00', '16:00', 0xf2668b),
+    { ...ev('Dentist', -2, '15:00', '16:00', 0xf2668b), cancelled: true },
     { ...ev('Morning run', -3, '07:00', '07:45', 0x34c38f), repeat: { freq: 'weekly', interval: 1, weekdays: [1, 3, 5], until: null, count: null } },
+  ];
+  let nextTag = 4;
+  let tags: Tag[] = [
+    { id: 1, name: 'Meeting', color: 0x4aa8ff, category: 'Work' },
+    { id: 2, name: 'Deadline', color: 0xf2668b, category: 'Work' },
+    { id: 3, name: 'Health', color: 0x34c38f, category: 'Personal' },
   ];
   const ddays: DDay[] = [
     { id: 1, title: 'Final exam', date: addDays(t, 12), color: 0xf2668b, image: null },
@@ -127,7 +134,7 @@ export function installMock() {
     }
   }
   const settings: Record<string, string> = { 'expense.currency': 'KRW', 'expense.budget': '1200000' };
-  let tracker = { paused: false, idle_threshold_secs: 300, ignored_apps: ['Spotify'] };
+  let tracker = { paused: false, idle_threshold_secs: 300, tracked_apps: ['Code', 'Google Chrome'] };
 
   mockIPC((cmd, a: any) => {
     switch (cmd) {
@@ -179,6 +186,9 @@ export function installMock() {
         if (e) e.exdates = e.exdates.filter((d) => d !== a.day);
         return null;
       }
+      case 'tags': return [...tags];
+      case 'save_tag': { if (!a.tag.id) { tags.push({ ...a.tag, id: nextTag }); return nextTag++; } tags = tags.map((x) => (x.id === a.tag.id ? a.tag : x)); return a.tag.id; }
+      case 'delete_tag': tags = tags.filter((x) => x.id !== a.id); for (const e of events) e.tags = e.tags.filter((id) => id !== a.id); return null;
       case 'ddays': return [...ddays].sort((x, y) => x.date.localeCompare(y.date));
       case 'save_dday': if (a.dday.id) Object.assign(ddays.find((d) => d.id === a.dday.id)!, a.dday); else ddays.push({ ...a.dday, id: nextId++ }); return null;
       case 'delete_dday': ddays.splice(ddays.findIndex((d) => d.id === a.id), 1); return null;
@@ -225,7 +235,7 @@ export function installMock() {
         };
       }
       case 'activity_timeline': { const s = dayStartTs(a.day); return activity.filter((x) => x.end > s && x.start < s + 86_400); }
-      case 'tracker_status': return tracker.paused ? { state: 'paused', app: '', title: '', segment_secs: 0 } : { state: 'tracking', app: 'Code', title: 'App.svelte — NoraSchedule', segment_secs: 754 };
+      case 'tracker_status': return tracker.paused ? { state: 'paused', app: '', title: '', segment_secs: 0, recent_apps: [] } : { state: 'tracking', app: 'Code', title: 'App.svelte — NoraSchedule', segment_secs: 754, recent_apps: ['Code', 'Google Chrome', 'Slack', 'Spotify'] };
       case 'tracker_settings': return tracker;
       case 'set_tracker_settings': tracker = a.settings; return null;
       case 'bookmark_folders': return folders;

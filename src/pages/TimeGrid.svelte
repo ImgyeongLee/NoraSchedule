@@ -1,10 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { MapPin, Repeat, Target } from '@lucide/svelte';
-  import { copyEvent, copyOnHover, eventMenu, pasteAsEvent, pointer, slotMenu } from '../lib/clipboard.svelte';
+  import { eventMenu, pasteAsEvent, pointer, slotMenu } from '../lib/clipboard.svelte';
+  import { eventHover } from '../lib/hovercard.svelte';
   import { isSecondaryClick, openMenu } from '../lib/menu.svelte';
   import type { CalEvent, DDay } from '../lib/api';
-  import { hex } from '../lib/colors';
+  import { hex, textOn } from '../lib/colors';
+  import { layoutLanes, type CalTodo } from '../lib/lanes';
+  import TodoChip from '../components/TodoChip.svelte';
   import { covers, fmt, isAllDayLane, minutesOf, overlapColumns, pad, timeOf, today } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
 
@@ -12,6 +15,7 @@
     days,
     events,
     ddays,
+    todos = [],
     onopen,
     onnew,
     onday,
@@ -20,6 +24,8 @@
     days: string[];
     events: CalEvent[];
     ddays: DDay[];
+    /** Todos with a due date, shown in the all-day row. */
+    todos?: CalTodo[];
     onopen: (e: CalEvent) => void;
     onnew: (day: string, minutes: number) => void;
     onday: (day: string) => void;
@@ -65,13 +71,9 @@
     return () => clearInterval(t);
   });
 
-  const lane = $derived(
-    days.map((day) => ({
-      ddays: ddays.filter((d) => d.date === day),
-      events: events.filter((e) => isAllDayLane(e) && covers(e, day)),
-    })),
-  );
-  const laneRows = $derived(Math.min(4, Math.max(1, ...lane.map((l) => l.ddays.length + l.events.length))));
+  // All-day and multi-day events run as continuous bars across the days they cover.
+  const lane = $derived(layoutLanes(days, ddays, events.filter(isAllDayLane), todos));
+  const laneRows = $derived(Math.max(1, ...lane.lanesPerDay));
 
   function timedFor(day: string) {
     const items = events
@@ -109,23 +111,35 @@
     {/each}
   </div>
 
-  <div class="lane" style:min-height="{laneRows * 24 + 10}px">
-    <div class="gutter-label">{t('cal.allDayLane')}</div>
-    {#each lane as l, i (days[i])}
-      <div class="lane-col">
-        {#each l.ddays as d (d.id)}
-          <div class="chip dday" style:--c={hex(d.color)}><Target size={12} /> <span class="truncate">{d.title}</span></div>
-        {/each}
-        {#each l.events as e (`${e.id}-${e.occurrence}`)}
-          <button
-            class="chip allday"
-            style:--c={hex(e.color)}
-            onclick={() => onopen(e)}
-            {...copyOnHover(() => copyEvent(e))}
-            oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => onopen(e)))}
-          ><span class="truncate">{e.title}</span></button>
-        {/each}
-      </div>
+  <div class="lane">
+    <div class="gutter-label" style:grid-row="1 / span {laneRows}">{t('cal.allDayLane')}</div>
+    {#each lane.placed as b, i (i)}
+      {#if b.kind === 'dday'}
+        <div class="chip dday" style:grid-column="{b.col + 2} / span 1" style:grid-row={b.lane + 1} style:--c={hex(b.d.color)}>
+          <Target size={12} /> <span class="truncate">{b.d.title}</span>
+        </div>
+      {:else if b.kind === 'todo'}
+        <TodoChip item={b.t} compact style="grid-column: {b.col + 2} / span 1; grid-row: {b.lane + 1}" />
+      {:else}
+        {@const e = b.e}
+        <button
+          class="chip event-block"
+          class:cancelled={e.cancelled}
+          class:from-prev={b.fromPrev}
+          class:to-next={b.toNext}
+          style:grid-column="{b.col + 2} / span {b.span}"
+          style:grid-row={b.lane + 1}
+          style:--c={hex(e.color)}
+          style:--on-c={textOn(e.color)}
+          onclick={() => onopen(e)}
+          title={e.title}
+          {...eventHover(e)}
+          oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => onopen(e)))}
+        >
+          {#if e.repeat}<Repeat size={11} />{/if}
+          <span class="truncate">{e.title}</span>
+        </button>
+      {/if}
     {/each}
   </div>
 
@@ -156,15 +170,17 @@
         >
           {#each timedFor(day) as t (`${t.e.id}-${t.e.occurrence}`)}
             <button
-              class="event"
+              class="event event-block"
+              class:cancelled={t.e.cancelled}
               style:--c={hex(t.e.color)}
+              style:--on-c={textOn(t.e.color)}
               style:top="{(t.s / 60) * HOUR + 1}px"
               style:height="{((t.end - t.s) / 60) * HOUR - 3}px"
               style:left="calc({(t.col / t.cols) * 100}% + 3px)"
               style:width="calc({100 / t.cols}% - 6px)"
               onclick={(ev) => { ev.stopPropagation(); onopen(t.e); }}
               onpointermove={(ev) => ev.stopPropagation()}
-              {...copyOnHover(() => copyEvent(t.e))}
+              {...eventHover(t.e)}
               oncontextmenu={(ev) => openMenu(ev, eventMenu(t.e, () => onopen(t.e)))}
             >
               <span class="ev-title">{#if t.e.repeat}<Repeat size={11} />{/if} {t.e.title}</span>
@@ -209,7 +225,9 @@
     padding: 10px 10px 6px 0;
   }
   .lane {
-    padding-right: 10px;
+    grid-auto-rows: 21px;
+    row-gap: 3px;
+    padding: 4px 10px 6px 0;
     border-bottom: 1px solid var(--border);
   }
   .dayhead {
@@ -254,15 +272,9 @@
   .gutter-label {
     font-size: 11px;
     color: var(--faint);
-    padding: 8px 8px 0 0;
+    padding: 4px 8px 0 0;
     text-align: right;
-  }
-  .lane-col {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 4px 3px;
-    min-width: 0;
+    grid-column: 1;
   }
   .chip {
     display: flex;
@@ -276,12 +288,18 @@
     font-weight: 550;
     cursor: pointer;
     min-width: 0;
+    margin: 0 3px;
     text-align: left;
   }
-  .allday {
-    background: color-mix(in srgb, var(--c) 22%, var(--surface));
-    box-shadow: inset 3px 0 0 var(--c);
-    color: var(--text);
+  .chip.from-prev {
+    margin-left: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  .chip.to-next {
+    margin-right: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
   }
   .dday {
     color: var(--c);
@@ -327,9 +345,8 @@
     padding: 5px 8px;
     border: none;
     border-radius: 10px;
-    background: color-mix(in srgb, var(--c) 24%, var(--surface));
-    box-shadow: inset 3px 0 0 var(--c);
-    color: var(--text);
+    /* Keeps side-by-side overlapping events visually apart. */
+    box-shadow: 0 0 0 1.5px var(--surface);
     text-align: left;
     overflow: hidden;
     cursor: pointer;
@@ -337,7 +354,6 @@
     min-height: 20px;
   }
   .event:hover {
-    background: color-mix(in srgb, var(--c) 34%, var(--surface));
     z-index: 2;
   }
   .ev-title {
@@ -347,7 +363,7 @@
   }
   .ev-time {
     font-size: 11.5px;
-    color: var(--muted);
+    opacity: 0.85;
     max-width: 100%;
   }
   .drag-preview {

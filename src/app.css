@@ -770,3 +770,20 @@ input[type='time'] {
   color: var(--faint);
   pointer-events: none;
 }
+
+/* ---- Calendar events: a solid block of the event's color (--c, text --on-c). ---- */
+
+.event-block {
+  background: var(--c);
+  color: var(--on-c, #fff);
+}
+.event-block:hover {
+  filter: brightness(1.07);
+}
+.event-block.cancelled {
+  opacity: 0.5;
+}
+.event-block.cancelled,
+.event-block.cancelled * {
+  text-decoration: line-through;
+}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { slide } from 'svelte/transition';
-  import { ChevronDown, ChevronLeft, ChevronRight, Clock, Hourglass, Laptop, Pause, Play, ShieldCheck, Trophy, X } from '@lucide/svelte';
+  import { ChevronDown, ChevronLeft, ChevronRight, Clock, Hourglass, Laptop, Pause, Play, Plus, ShieldCheck, Trophy, X } from '@lucide/svelte';
   import StatCard from '../components/StatCard.svelte';
   import { api, type Activity, type ActivitySummary, type TrackerSettings, type TrackerStatus } from '../lib/api';
   import { colorForName } from '../lib/colors';
@@ -16,7 +16,7 @@
   let status = $state<TrackerStatus | null>(null);
   let settings = $state<TrackerSettings | null>(null);
   let expanded = $state<string | null>(null);
-  let newIgnored = $state('');
+  let newTracked = $state('');
 
   async function refresh() {
     const d = day;
@@ -52,6 +52,14 @@
     }
   }
 
+  function addTracked(app: string) {
+    if (settings) saveSettings({ ...settings, tracked_apps: [...settings.tracked_apps, app] });
+  }
+
+  const suggestions = $derived(
+    (status?.recent_apps ?? []).filter((app) => !settings?.tracked_apps.some((a) => a.toLowerCase() === app.toLowerCase())),
+  );
+
   const dayStart = $derived(dayStartTs(day));
   const pct = (ts: number) => Math.min(100, Math.max(0, ((ts - dayStart) / 86_400) * 100));
   const titlesFor = (app: string) => summary?.titles.filter((t) => t.app === app) ?? [];
@@ -72,7 +80,7 @@
       <div class="live-dot" class:on={status.state === 'tracking'}></div>
       <div class="live-info">
         <div class="live-state">{s.label}</div>
-        {#if status.state === 'tracking' || status.state === 'ignored'}
+        {#if status.state === 'tracking' || status.state === 'untracked'}
           <div class="live-app truncate">{status.app}</div>
           {#if status.title}<div class="muted truncate">{status.title}</div>{/if}
           {#if status.state === 'tracking'}<div class="faint small">{t('trk.focusedFor', { d: fmtDuration(status.segment_secs) })}</div>{/if}
@@ -177,36 +185,39 @@
       </div>
       <div class="setting col">
         <div>
-          <div class="s-title">{t('trk.ignoredTitle')}</div>
-          <div class="muted small">{t('trk.ignoredBody')}</div>
+          <div class="s-title">{t('trk.trackedTitle')}</div>
+          <div class="muted small">{t('trk.trackedBody')}</div>
         </div>
-        <div class="ignored">
-          {#each settings.ignored_apps as app (app)}
+        <div class="app-list">
+          {#each settings.tracked_apps as app (app)}
             <span class="chip big-chip">
               {app}
               <button
-                onclick={() => settings && saveSettings({ ...settings, ignored_apps: settings.ignored_apps.filter((a) => a !== app) })}
-                aria-label={t('trk.stopIgnoring', { app })}><X size={13} /></button
+                onclick={() => settings && saveSettings({ ...settings, tracked_apps: settings.tracked_apps.filter((a) => a !== app) })}
+                aria-label={t('trk.stopTracking', { app })}><X size={13} /></button
               >
             </span>
           {/each}
           <input
             class="input narrow"
-            placeholder={t('trk.ignorePlaceholder')}
-            bind:value={newIgnored}
+            placeholder={t('trk.trackPlaceholder')}
+            bind:value={newTracked}
             onkeydown={(e) => {
-              if (e.key === 'Enter' && newIgnored.trim() && settings) {
-                saveSettings({ ...settings, ignored_apps: [...settings.ignored_apps, newIgnored.trim()] });
-                newIgnored = '';
+              if (e.key === 'Enter' && newTracked.trim()) {
+                addTracked(newTracked.trim());
+                newTracked = '';
               }
             }}
           />
-          {#if status?.app && !settings.ignored_apps.includes(status.app)}
-            <button class="btn small" onclick={() => settings && status && saveSettings({ ...settings, ignored_apps: [...settings.ignored_apps, status.app] })}>
-              {t('trk.ignoreApp', { app: status.app })}
-            </button>
-          {/if}
         </div>
+        {#if suggestions.length}
+          <div class="app-list">
+            <span class="faint small">{t('trk.recentApps')}</span>
+            {#each suggestions as app (app)}
+              <button class="btn small" onclick={() => addTracked(app)}><Plus size={14} /> {app}</button>
+            {/each}
+          </div>
+        {/if}
       </div>
       <div class="tip">
         <ShieldCheck size={18} />
@@ -378,7 +389,7 @@
     width: 200px;
     flex: none;
   }
-  .ignored {
+  .app-list {
     display: flex;
     flex-wrap: wrap;
     align-items: center;

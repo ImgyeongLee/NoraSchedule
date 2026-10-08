@@ -1,10 +1,22 @@
 <script lang="ts">
   import { ChevronLeft, ChevronRight } from '@lucide/svelte';
-  import { addMonths, fmt, monthStart, range, today, weekStart, weekdayNames } from '../lib/dates';
+  import type { CalEvent } from '../lib/api';
+  import { addMonths, covers, fmt, monthStart, range, today, weekStart, weekdayNames } from '../lib/dates';
+  import { hideHoverCard, showHoverCard } from '../lib/hovercard.svelte';
   import { t } from '../lib/i18n.svelte';
 
-  let { selected, onpick, marks = new Set<string>() }: { selected: string; onpick: (d: string) => void; marks?: Set<string> } =
-    $props();
+  let {
+    selected,
+    onpick,
+    marks = new Set<string>(),
+    events = [],
+  }: {
+    selected: string;
+    onpick: (d: string) => void;
+    marks?: Set<string>;
+    /** When given, hovering a day previews its events. */
+    events?: CalEvent[];
+  } = $props();
 
   let shownOverride = $state<string | null>(null);
   const shown = $derived(shownOverride ?? monthStart(selected));
@@ -34,7 +46,9 @@
         class:other={day.slice(0, 7) !== shown.slice(0, 7)}
         class:today={day === todayStr}
         class:selected={day === selected}
-        onclick={() => onpick(day)}
+        onclick={() => { hideHoverCard(); onpick(day); }}
+        onmouseenter={(e) => showHoverCard(e.currentTarget, events.filter((ev) => covers(ev, day)), fmt(day, { month: 'long', day: 'numeric', weekday: 'short' }))}
+        onmouseleave={hideHoverCard}
       >
         {Number(day.slice(8))}
         {#if marks.has(day)}<span class="mark"></span>{/if}

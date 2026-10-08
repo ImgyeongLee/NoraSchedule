@@ -3,7 +3,7 @@
 // Items are copied to an in-app clipboard (and as plain text to the system clipboard, so
 // they can be pasted into other apps). Whatever the mouse is over decides what is copied
 // and where a paste lands; each page also registers a fallback paste target.
-import { ClipboardPaste, Copy, CopyPlus, Pencil, Trash } from '@lucide/svelte';
+import { Ban, ClipboardPaste, Copy, CopyPlus, Pencil, RotateCcw, Trash } from '@lucide/svelte';
 import { api, type CalEvent, type Todo } from './api';
 import { DEFAULT_COLOR } from './colors';
 import { addDays, addMinutes, dateOf, diffDays, pad, timeOf, toDateTime } from './dates';
@@ -92,7 +92,7 @@ async function run(work: () => Promise<unknown>, message: string) {
 }
 
 /** A one-off copy of `src` (repeat rules are not copied). */
-const single = (src: CalEvent): CalEvent => ({ ...src, id: 0, repeat: null, exdates: [], occurrence: null });
+const single = (src: CalEvent): CalEvent => ({ ...src, id: 0, repeat: null, exdates: [], occurrence: null, cancelled: false });
 
 /** Copy of `src` moved to `day` (and to `minutes` past midnight, if given), keeping its length. */
 function eventOn(src: CalEvent, day: string, minutes?: number): CalEvent {
@@ -118,7 +118,7 @@ export function pasteAsEvent(day: string, minutes?: number) {
     const start = toDateTime(day, m !== undefined ? fmtMinutes(m) : '00:00');
     event = {
       id: 0, title: todo.title, start, end: m !== undefined ? addMinutes(start, 60) : start, all_day: m === undefined,
-      color: DEFAULT_COLOR, location: '', links: [], memo: todo.notes, repeat: null, exdates: [], occurrence: null,
+      color: DEFAULT_COLOR, location: '', links: [], memo: todo.notes, repeat: null, exdates: [], occurrence: null, cancelled: false, tags: [], reminder: null,
     };
   }
   run(() => api.saveEvent(event), t('clip.pasted', { name: event.title }));
@@ -182,6 +182,25 @@ export async function deleteEventWithUndo(e: CalEvent) {
   }
 }
 
+/** Marks an event as cancelled (kept on the calendar, struck through) or restores it. Offers undo. */
+export async function setEventCancelled(e: CalEvent, cancelled: boolean) {
+  const scope = isRepeatingOccurrence(e) ? await askScope('save') : 'all';
+  if (!scope) return;
+  try {
+    const id = await api.saveEvent({ ...e, cancelled }, scope);
+    data.version++;
+    const day = e.occurrence;
+    // Changing one day of a series detaches it into its own event; undo removes that copy again.
+    const undo =
+      scope === 'one' && day
+        ? () => run(async () => { await api.deleteEvent(id, null, 'all'); await api.restoreOccurrence(e.id, day); }, t('event.saved'))
+        : () => run(() => api.saveEvent({ ...e, cancelled: !cancelled }, scope), t('event.saved'));
+    toast(t(cancelled ? 'clip.cancelled' : 'clip.restored', { name: e.title }), 'info', { label: t('common.undo'), run: undo });
+  } catch (err) {
+    toast(String(err), 'error');
+  }
+}
+
 export async function deleteTodoWithUndo(tree: TodoTree) {
   const snapshot: TodoTree = JSON.parse(JSON.stringify(tree));
   pointer.copy = null;
@@ -205,6 +224,9 @@ export function eventMenu(e: CalEvent, onEdit: () => void): MenuItem[] {
     { label: t('menu.copy'), icon: Copy, shortcut: shortcut('C'), action: () => copyEvent(e) },
     { label: t('menu.duplicate'), icon: CopyPlus, action: () => duplicateEvent(e) },
     'separator',
+    e.cancelled
+      ? { label: t('menu.uncancelEvent'), icon: RotateCcw, action: () => setEventCancelled(e, false) }
+      : { label: t('menu.cancelEvent'), icon: Ban, action: () => setEventCancelled(e, true) },
     { label: t('menu.delete'), icon: Trash, danger: true, action: () => deleteEventWithUndo(e) },
   ];
 }

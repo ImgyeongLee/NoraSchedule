@@ -1,11 +1,15 @@
 <script lang="ts">
   import { openUrl } from '@tauri-apps/plugin-opener';
-  import { Link, MapPin, Plus, Trash, X } from '@lucide/svelte';
+  import { Ban, Bell, Link, MapPin, Plus, RotateCcw, Trash, X } from '@lucide/svelte';
+  import TagManager from '../components/TagManager.svelte';
+  import { hex } from '../lib/colors';
+  import { MAX_REMINDER_MINUTES, REMINDER_PRESETS, reminderLabel } from '../lib/reminders';
+  import { tagStore } from '../lib/tags.svelte';
   import Modal from '../components/Modal.svelte';
   import ColorPicker from '../components/ColorPicker.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
   import RepeatEditor from '../components/RepeatEditor.svelte';
-  import { deleteEventWithUndo } from '../lib/clipboard.svelte';
+  import { deleteEventWithUndo, setEventCancelled } from '../lib/clipboard.svelte';
   import { askScope, isRepeatingOccurrence } from '../lib/prompt.svelte';
   import { api, type CalEvent } from '../lib/api';
   import { addMinutes, dateOf, timeOf, toDateTime } from '../lib/dates';
@@ -27,6 +31,8 @@
       links: [...event.links],
       memo: event.memo,
       repeat: event.repeat ? { ...event.repeat, weekdays: [...event.repeat.weekdays] } : null,
+      tags: [...event.tags],
+      reminder: event.reminder,
     };
   }
   let form = $state(initialForm());
@@ -34,6 +40,21 @@
   let error = $state('');
   const isNew = $derived(event.id === 0);
   const repeating = $derived(isRepeatingOccurrence(event));
+  let creatingTag = $state(false);
+
+  function toggleTag(id: number) {
+    form.tags = form.tags.includes(id) ? form.tags.filter((x) => x !== id) : [...form.tags, id];
+  }
+
+  // Reminder: one of the presets, or 'custom' with its own number of minutes.
+  const isCustomReminder = () => !REMINDER_PRESETS.includes(event.reminder);
+  let customReminder = $state(isCustomReminder());
+  const reminderChoice = $derived(customReminder ? 'custom' : String(form.reminder));
+  function pickReminder(value: string) {
+    customReminder = value === 'custom';
+    if (value === 'custom') form.reminder = form.reminder ?? 15;
+    else form.reminder = value === 'null' ? null : Number(value);
+  }
 
   // Keep the end after the start when the start moves (like Google Calendar).
   function startChanged() {
@@ -82,6 +103,9 @@
         repeat: form.repeat && { ...form.repeat, interval: Math.max(1, Math.round(form.repeat.interval || 1)) },
         exdates: event.exdates,
         occurrence: event.occurrence,
+        cancelled: event.cancelled,
+        tags: form.tags,
+        reminder: form.reminder === null ? null : Math.min(MAX_REMINDER_MINUTES, Math.max(1, Math.round(form.reminder))),
         },
         scope,
       ),
@@ -97,12 +121,21 @@
     await deleteEventWithUndo(target);
   }
 
+  async function toggleCancelled() {
+    const target = $state.snapshot(event) as CalEvent;
+    onclose();
+    await setEventCancelled(target, !target.cancelled);
+  }
+
   function onkeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
   }
 </script>
 
 <Modal title={isNew ? t('event.new') : t('event.edit')} {onclose} width={540}>
+  {#if event.cancelled}
+    <p class="cancelled-note"><Ban size={15} /> {t('event.cancelledNote')}</p>
+  {/if}
   <!-- svelte-ignore a11y_autofocus -->
   <input class="input title" placeholder={t('event.titlePlaceholder')} bind:value={form.title} autofocus {onkeydown} />
 
@@ -132,6 +165,38 @@
   <div class="field repeat-box">
     <span class="label">{t('rep.label')}</span>
     <RepeatEditor bind:value={form.repeat} startDate={form.startDate} />
+  </div>
+
+  <div class="field">
+    <label for="ev-remind">{t('remind.label')}</label>
+    <div class="row remind">
+      <Bell size={16} />
+      <select id="ev-remind" class="select" value={reminderChoice} onchange={(e) => pickReminder(e.currentTarget.value)}>
+        {#each REMINDER_PRESETS as m (m)}<option value={String(m)}>{reminderLabel(m)}</option>{/each}
+        <option value="custom">{t('remind.custom')}</option>
+      </select>
+      {#if customReminder}
+        <input class="input minutes" type="number" min="1" max={MAX_REMINDER_MINUTES} bind:value={form.reminder} />
+        <span class="muted">{t('remind.minutesBefore')}</span>
+      {/if}
+    </div>
+  </div>
+
+  <div class="field">
+    <span class="label">{t('tag.title')}</span>
+    <div class="tag-pick">
+      {#each tagStore.list as tag (tag.id)}
+        <button
+          type="button"
+          class="tag-chip"
+          class:on={form.tags.includes(tag.id)}
+          style:--tc={hex(tag.color)}
+          onclick={() => toggleTag(tag.id)}
+          title={tag.category || undefined}
+        ><span class="tag-dot"></span>{tag.name}</button>
+      {/each}
+      <button type="button" class="btn small ghost" onclick={() => (creatingTag = true)}><Plus size={14} /> {t('tag.create')}</button>
+    </div>
   </div>
 
   <div class="field">
@@ -182,11 +247,29 @@
     {:else if !isNew}
       <ConfirmButton onconfirm={remove} question={t('event.deleteQ')} />
     {/if}
+    {#if !isNew}
+      <button class="btn" onclick={toggleCancelled}>
+        {#if event.cancelled}<RotateCcw size={16} /> {t('event.uncancel')}{:else}<Ban size={16} /> {t('event.cancelEvent')}{/if}
+      </button>
+    {/if}
     <span class="spacer"></span>
     <button class="btn ghost" onclick={onclose}>{t('common.cancel')}</button>
     <button class="btn primary" onclick={save}>{isNew ? t('event.addButton') : t('common.save')}</button>
   {/snippet}
 </Modal>
+
+{#if creatingTag}
+  <TagManager
+    startNew
+    onclose={() => (creatingTag = false)}
+    oncreated={(id) => {
+      form.tags = [...form.tags, id];
+      const tag = tagStore.list.find((x) => x.id === id);
+      // A new event takes the color of its first tag.
+      if (tag && isNew && form.tags.length === 1) form.color = tag.color;
+    }}
+  />
+{/if}
 
 <style>
   .when {
@@ -267,6 +350,61 @@
   }
   .error {
     color: var(--danger);
+    font-weight: 600;
+  }
+  .remind {
+    gap: 8px;
+    color: var(--faint);
+  }
+  .remind .select {
+    width: auto;
+    flex: none;
+  }
+  .minutes {
+    width: 90px;
+    flex: none;
+  }
+  .tag-pick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 11px;
+    border: 1.5px solid color-mix(in srgb, var(--tc) 40%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tag-chip.on {
+    background: var(--tc);
+    border-color: var(--tc);
+    color: #fff;
+  }
+  .tag-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tc);
+  }
+  .tag-chip.on .tag-dot {
+    background: #fff;
+  }
+  .cancelled-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    color: var(--muted);
     font-weight: 600;
   }
   @media (max-width: 620px) {

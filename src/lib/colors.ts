@@ -22,3 +22,11 @@ export function colorForName(name: string): string {
   for (let i = 0; i < name.length; i++) h = ((h * 33) ^ name.charCodeAt(i)) >>> 0;
   return hex(PALETTE[h % PALETTE.length].value);
 }
+
+/** Readable text color (dark or white) on a solid block of color `n`. */
+export function textOn(n: number): string {
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return (r * 299 + g * 587 + b * 114) / 1000 > 165 ? '#1e2232' : '#ffffff';
+}

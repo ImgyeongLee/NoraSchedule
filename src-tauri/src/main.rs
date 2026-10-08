@@ -7,6 +7,7 @@ mod db;
 mod expenses;
 mod images;
 mod recurrence;
+mod reminders;
 mod tracker;
 
 use std::path::PathBuf;
@@ -65,11 +66,13 @@ fn main() {
             if let Ok(keep) = db.referenced_images() {
                 images::collect_garbage(&images_dir, &keep);
             }
+            reminders::start(app.handle().clone(), db_path.clone());
             let tracker = tracker::start(db_path, tracker::TrackerSettings::load(&db));
             app.manage(AppState { db: Mutex::new(db), tracker, images_dir, data_dir: dir });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::set_titlebar_colors,
             commands::get_setting,
             commands::export_data,
             commands::inspect_backup,
@@ -89,6 +92,9 @@ fn main() {
             commands::save_event,
             commands::delete_event,
             commands::restore_occurrence,
+            commands::tags,
+            commands::save_tag,
+            commands::delete_tag,
             commands::ddays,
             commands::save_dday,
             commands::delete_dday,

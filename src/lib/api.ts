@@ -38,6 +38,28 @@ export interface CalEvent {
   exdates: DateStr[];
   /** For an occurrence of a repeating event: the date it falls on. */
   occurrence: DateStr | null;
+  /** Called off but kept on the calendar (shown struck through). */
+  cancelled: boolean;
+  /** Ids of the attached tags. */
+  tags: number[];
+  /** Remind this many minutes before the start; null for no reminder. */
+  reminder: number | null;
+}
+
+/** A user-defined label for events, optionally grouped under a category. */
+export interface Tag {
+  id: number;
+  name: string;
+  color: number;
+  /** Free-text group, e.g. "Work"; empty for none. */
+  category: string;
+}
+
+/** Sent by the backend when an event's reminder time arrives. */
+export interface Reminder {
+  event: CalEvent;
+  /** When the event starts (09:00 for all-day events). */
+  starts_at: DateTime;
 }
 
 export interface DDay {
@@ -131,22 +153,28 @@ export interface ActivitySummary {
   titles: { app: string; title: string; secs: number }[];
 }
 
-export type TrackState = 'starting' | 'tracking' | 'idle' | 'paused' | 'ignored' | 'unavailable';
+export type TrackState = 'starting' | 'tracking' | 'idle' | 'paused' | 'untracked' | 'unavailable';
 
 export interface TrackerStatus {
   state: TrackState;
   app: string;
   title: string;
   segment_secs: number;
+  /** Apps focused recently (most recent first), offered as suggestions for the tracked list. */
+  recent_apps: string[];
 }
 
 export interface TrackerSettings {
   paused: boolean;
   idle_threshold_secs: number;
-  ignored_apps: string[];
+  /** Apps whose time is recorded; every other app is skipped. */
+  tracked_apps: string[];
 }
 
 export const api = {
+  /** Paints the native title bar (Windows 11) in the theme's colors, as 0xRRGGBB. */
+  setTitlebarColors: (caption: number, text: number, dark: boolean) =>
+    invoke<void>('set_titlebar_colors', { caption, text, dark }),
   getSetting: (key: string) => invoke<string | null>('get_setting', { key }),
 
   exportData: (path: string) => invoke<BackupManifest>('export_data', { path }),
@@ -163,6 +191,12 @@ export const api = {
   deleteEvent: (id: number, occurrence: DateStr | null = null, scope: Scope = 'all') =>
     invoke<CalEvent | null>('delete_event', { id, occurrence, scope }),
   restoreOccurrence: (id: number, day: DateStr) => invoke<void>('restore_occurrence', { id, day }),
+
+  tags: () => invoke<Tag[]>('tags'),
+  /** Creates (id 0) or updates a tag; returns its id. */
+  saveTag: (tag: Tag) => invoke<number>('save_tag', { tag }),
+  /** Deletes a tag and removes it from every event. */
+  deleteTag: (id: number) => invoke<void>('delete_tag', { id }),
 
   ddays: () => invoke<DDay[]>('ddays'),
   saveDday: (dday: DDay) => invoke<void>('save_dday', { dday }),

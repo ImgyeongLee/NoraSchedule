@@ -14,6 +14,9 @@
   import ContextMenu from './components/ContextMenu.svelte';
   import { isSecondaryClick } from './lib/menu.svelte';
   import ScopeDialog from './components/ScopeDialog.svelte';
+  import EventHoverCard from './components/EventHoverCard.svelte';
+  import { refreshTags } from './lib/tags.svelte';
+  import { initReminders } from './lib/reminders';
   import Home from './pages/Home.svelte';
   import Calendar from './pages/Calendar.svelte';
   import DDays from './pages/DDays.svelte';
@@ -52,6 +55,8 @@
     initLocale();
     initSidebar();
     pomodoro.load();
+    refreshTags();
+    initReminders();
     const poll = async () => (tracker = await api.trackerStatus().catch(() => null));
     poll();
     const timer = setInterval(poll, 2000);
@@ -260,6 +265,7 @@
 
   <ContextMenu />
   <ScopeDialog />
+  <EventHoverCard />
 
   <!-- Keyed list so a leaving toast keeps rendering its own data while it animates out. -->
   {#each ui.toast ? [ui.toast] : [] as item (item.id)}
