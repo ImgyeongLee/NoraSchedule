@@ -1,0 +1,212 @@
+// Typed wrappers around the Rust commands in src-tauri/src/commands.rs.
+import { invoke } from '@tauri-apps/api/core';
+
+/** Local date-time as `YYYY-MM-DDTHH:MM:SS` (no timezone). */
+export type DateTime = string;
+/** Local date as `YYYY-MM-DD`. */
+export type DateStr = string;
+
+export type Freq = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface Repeat {
+  freq: Freq;
+  interval: number;
+  /** Weekly only: 0 = Sunday … 6 = Saturday. Empty = the first occurrence's weekday. */
+  weekdays: number[];
+  /** Last date an occurrence may start on. */
+  until: DateStr | null;
+  /** Total number of occurrences. */
+  count: number | null;
+}
+
+/** For repeating events: change only this occurrence, or the whole series. */
+export type Scope = 'one' | 'all';
+
+export interface CalEvent {
+  id: number;
+  title: string;
+  start: DateTime;
+  /** Exclusive end for timed events; the last day (at 00:00) for all-day events. */
+  end: DateTime;
+  all_day: boolean;
+  color: number;
+  location: string;
+  links: string[];
+  memo: string;
+  repeat: Repeat | null;
+  /** Skipped occurrence dates of a series. */
+  exdates: DateStr[];
+  /** For an occurrence of a repeating event: the date it falls on. */
+  occurrence: DateStr | null;
+}
+
+export interface DDay {
+  id: number;
+  title: string;
+  date: DateStr;
+  color: number;
+  /** Cover image file name (see lib/images.ts), or null. */
+  image: string | null;
+}
+
+export interface TodoGroup {
+  id: number;
+  name: string;
+  color: number;
+}
+
+export interface Todo {
+  id: number;
+  group_id: number | null;
+  parent_id: number | null;
+  title: string;
+  notes: string;
+  done: boolean;
+  due: DateStr | null;
+  /** Optional deadline time `HH:MM`, only used together with `due`. */
+  due_time: string | null;
+  created_at: number;
+  completed_at: number | null;
+}
+
+export interface BookmarkFolder {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  color: number;
+}
+
+export interface Bookmark {
+  id: number;
+  folder_id: number | null;
+  title: string;
+  url: string;
+  /** Preset icon id, see lib/bookmarks.ts. */
+  kind: string;
+  note: string;
+  created_at: number;
+}
+
+export interface Expense {
+  id: number;
+  amount: number;
+  /** Preset category id, see lib/expenses.svelte.ts. */
+  category: string;
+  date: DateStr;
+  note: string;
+}
+
+export interface BackupManifest {
+  format: number;
+  app_version: string;
+  exported_at: number;
+  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; images: number };
+}
+
+export interface Memo {
+  id: number;
+  title: string;
+  body: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PomodoroSession {
+  started_at: number;
+  ended_at: number;
+  label: string;
+}
+
+export interface Activity {
+  app: string;
+  title: string;
+  start: number;
+  end: number;
+}
+
+export interface ActivitySummary {
+  total: number;
+  per_day: number[];
+  apps: { app: string; secs: number }[];
+  titles: { app: string; title: string; secs: number }[];
+}
+
+export type TrackState = 'starting' | 'tracking' | 'idle' | 'paused' | 'ignored' | 'unavailable';
+
+export interface TrackerStatus {
+  state: TrackState;
+  app: string;
+  title: string;
+  segment_secs: number;
+}
+
+export interface TrackerSettings {
+  paused: boolean;
+  idle_threshold_secs: number;
+  ignored_apps: string[];
+}
+
+export const api = {
+  getSetting: (key: string) => invoke<string | null>('get_setting', { key }),
+
+  exportData: (path: string) => invoke<BackupManifest>('export_data', { path }),
+  inspectBackup: (path: string) => invoke<BackupManifest>('inspect_backup', { path }),
+  /** Replaces all data with the backup and restarts the app (does not return on success). */
+  importData: (path: string) => invoke<void>('import_data', { path }),
+  /** Deletes all data and restarts the app (does not return on success). */
+  resetAllData: () => invoke<void>('reset_all_data'),
+  setSetting: (key: string, value: string) => invoke<void>('set_setting', { key, value }),
+
+  eventsBetween: (from: DateStr, to: DateStr) => invoke<CalEvent[]>('events_between', { from, to }),
+  saveEvent: (event: CalEvent, scope: Scope = 'all') => invoke<number>('save_event', { event, scope }),
+  /** Returns the stored event as it was before deleting, for undo. */
+  deleteEvent: (id: number, occurrence: DateStr | null = null, scope: Scope = 'all') =>
+    invoke<CalEvent | null>('delete_event', { id, occurrence, scope }),
+  restoreOccurrence: (id: number, day: DateStr) => invoke<void>('restore_occurrence', { id, day }),
+
+  ddays: () => invoke<DDay[]>('ddays'),
+  saveDday: (dday: DDay) => invoke<void>('save_dday', { dday }),
+  deleteDday: (id: number) => invoke<void>('delete_dday', { id }),
+  /** Sends raw image bytes; Rust optimizes and stores them and returns the file name. */
+  importImage: (bytes: Uint8Array) => invoke<string>('import_image', bytes),
+  removeUnusedImages: () => invoke<void>('remove_unused_images'),
+
+  todoGroups: () => invoke<TodoGroup[]>('todo_groups'),
+  addTodoGroup: (name: string, color: number) => invoke<number>('add_todo_group', { name, color }),
+  updateTodoGroup: (group: TodoGroup) => invoke<void>('update_todo_group', { group }),
+  deleteTodoGroup: (id: number) => invoke<void>('delete_todo_group', { id }),
+  todos: () => invoke<Todo[]>('todos'),
+  addTodo: (groupId: number | null, parentId: number | null, title: string, due: DateStr | null = null, dueTime: string | null = null) =>
+    invoke<number>('add_todo', { groupId, parentId, title, due, dueTime }),
+  updateTodo: (todo: Todo) => invoke<void>('update_todo', { todo }),
+  setTodoDone: (id: number, done: boolean) => invoke<void>('set_todo_done', { id, done }),
+  deleteTodo: (id: number) => invoke<void>('delete_todo', { id }),
+
+  bookmarkFolders: () => invoke<BookmarkFolder[]>('bookmark_folders'),
+  saveBookmarkFolder: (folder: BookmarkFolder) => invoke<number>('save_bookmark_folder', { folder }),
+  deleteBookmarkFolder: (id: number) => invoke<void>('delete_bookmark_folder', { id }),
+  bookmarks: () => invoke<Bookmark[]>('bookmarks'),
+  saveBookmark: (bookmark: Bookmark) => invoke<number>('save_bookmark', { bookmark }),
+  deleteBookmark: (id: number) => invoke<Bookmark | null>('delete_bookmark', { id }),
+
+  expensesBetween: (from: DateStr, to: DateStr) => invoke<Expense[]>('expenses_between', { from, to }),
+  saveExpense: (expense: Expense) => invoke<number>('save_expense', { expense }),
+  deleteExpense: (id: number) => invoke<Expense | null>('delete_expense', { id }),
+
+  memos: () => invoke<Memo[]>('memos'),
+  createMemo: (title: string) => invoke<number>('create_memo', { title }),
+  updateMemo: (id: number, title: string, body: string) => invoke<void>('update_memo', { id, title, body }),
+  deleteMemo: (id: number) => invoke<void>('delete_memo', { id }),
+
+  addPomodoroSession: (startedAt: number, endedAt: number, label: string) =>
+    invoke<void>('add_pomodoro_session', { startedAt, endedAt, label }),
+  pomodoroSessions: (fromTs: number, toTs: number) =>
+    invoke<PomodoroSession[]>('pomodoro_sessions', { fromTs, toTs }),
+
+  activitySummary: (days: DateStr[], titleLimit = 50) =>
+    invoke<ActivitySummary>('activity_summary', { days, titleLimit }),
+  activityTimeline: (day: DateStr) => invoke<Activity[]>('activity_timeline', { day }),
+  trackerStatus: () => invoke<TrackerStatus>('tracker_status'),
+  trackerSettings: () => invoke<TrackerSettings>('tracker_settings'),
+  setTrackerSettings: (settings: TrackerSettings) => invoke<void>('set_tracker_settings', { settings }),
+};

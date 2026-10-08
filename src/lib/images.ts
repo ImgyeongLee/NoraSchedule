@@ -1,0 +1,42 @@
+// D-Day cover images. Rust does the optimizing and storage (src-tauri/src/images.rs);
+// this file handles picking files and building URLs for stored images.
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { api } from './api';
+import { t } from './i18n.svelte';
+
+/** Dev browser preview keeps imported images as blob URLs (see lib/mock.ts). */
+type PreviewWindow = Window & { __noraPreviewImages?: Map<string, string> };
+
+export function imageUrl(name: string): string {
+  return (window as PreviewWindow).__noraPreviewImages?.get(name) ?? convertFileSrc(name, 'noraimg');
+}
+
+/** Re-encodes an image the webview can display but Rust can't decode (e.g. HEIC) as PNG. */
+async function reencodeInWebview(file: File): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 2560 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) throw new Error('image_unsupported');
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** Imports a picked/dropped file and returns the stored file name. Throws a translated message. */
+export async function importImageFile(file: File): Promise<string> {
+  try {
+    try {
+      return await api.importImage(new Uint8Array(await file.arrayBuffer()));
+    } catch (e) {
+      if (String(e) !== 'image_unsupported') throw e;
+      return await api.importImage(await reencodeInWebview(file));
+    }
+  } catch (e) {
+    const code = String(e);
+    if (code.includes('image_too_large')) throw new Error(t('img.tooLarge'));
+    if (code.includes('image_unsupported') || code.includes('InvalidStateError')) throw new Error(t('img.unsupported'));
+    throw e instanceof Error ? e : new Error(code);
+  }
+}
