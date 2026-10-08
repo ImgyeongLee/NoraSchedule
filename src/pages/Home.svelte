@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from '../components/Select.svelte';
   import { onMount, type Component } from 'svelte';
   import { api, type DDay } from '../lib/api';
   import { flip } from 'svelte/animate';
@@ -171,15 +172,14 @@
               <button class="icon-btn danger" onclick={() => removeTile(i)} title={t('home.remove')} aria-label={t('home.remove')}><X size={16} /></button>
             </div>
             {#if tile.id === 'dday'}
-              <select
-                class="select dday-pick"
-                value={tile.ddayId ?? ''}
-                onchange={(e) => setTileDday(i, e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-                aria-label={t('w.dday.pick')}
-              >
-                <option value="">{t('w.dday.auto')}</option>
-                {#each ddays as d (d.id)}<option value={d.id}>{ddayLabel(d)} · {d.title}</option>{/each}
-              </select>
+              <div class="dday-pick">
+                <Select
+                  value={tile.ddayId ?? null}
+                  options={[{ value: null, label: t('w.dday.auto') }, ...ddays.map((d) => ({ value: d.id as number | null, label: `${ddayLabel(d)} · ${d.title}` }))]}
+                  onchange={(v) => setTileDday(i, v)}
+                  label={t('w.dday.pick')}
+                />
+              </div>
             {/if}
             <div class="sizes">
               {#each SIZES as s (s.id)}
@@ -367,7 +367,7 @@
     font-weight: 700;
     color: var(--text);
   }
-  .dday-pick {
+  .dday-pick :global(.select-btn) {
     height: 32px;
     font-size: 12.5px;
     background: var(--surface);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from '../components/Select.svelte';
   import { onMount } from 'svelte';
   import { slide } from 'svelte/transition';
   import { ChevronDown, ChevronLeft, ChevronRight, Clock, Hourglass, Laptop, Pause, Play, Plus, ShieldCheck, Trophy, X } from '@lucide/svelte';
@@ -173,15 +174,17 @@
           <div class="s-title">{t('trk.idleTitle')}</div>
           <div class="muted small">{t('trk.idleBody')}</div>
         </div>
-        <select
-          class="select narrow"
-          value={settings.idle_threshold_secs}
-          onchange={(e) => settings && saveSettings({ ...settings, idle_threshold_secs: Number(e.currentTarget.value) })}
-        >
-          {#each [60, 180, 300, 600, 900, 1800, 0] as v (v)}
-            <option value={v}>{v === 0 ? t('trk.never') : v === 60 ? t('trk.oneMinute') : t('trk.minutes', { n: v / 60 })}</option>
-          {/each}
-        </select>
+        <div class="narrow">
+          <Select
+            value={settings.idle_threshold_secs}
+            options={[60, 180, 300, 600, 900, 1800, 0].map((v) => ({
+              value: v,
+              label: v === 0 ? t('trk.never') : v === 60 ? t('trk.oneMinute') : t('trk.minutes', { n: v / 60 }),
+            }))}
+            onchange={(v) => settings && saveSettings({ ...settings, idle_threshold_secs: v })}
+            label={t('trk.idleTitle')}
+          />
+        </div>
       </div>
       <div class="setting col">
         <div>

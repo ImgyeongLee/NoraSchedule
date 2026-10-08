@@ -3,6 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { X } from '@lucide/svelte';
   import { t } from '../lib/i18n.svelte';
+  import { portal } from '../lib/portal';
 
   let {
     title,
@@ -27,7 +28,11 @@
 
 <svelte:window {onkeydown} />
 
+<!-- The overlay is moved to <body> so a dialog opened from a small Overview tile (or any
+     clipped area) still covers the whole window. The wrapper stays in place for Svelte. -->
+<div class="portal-anchor">
 <div
+  use:portal
   bind:this={overlay}
   class="overlay"
   transition:fade={{ duration: 140 }}
@@ -45,8 +50,12 @@
     {/if}
   </div>
 </div>
+</div>
 
 <style>
+  .portal-anchor {
+    display: contents;
+  }
   .overlay {
     position: fixed;
     inset: 0;

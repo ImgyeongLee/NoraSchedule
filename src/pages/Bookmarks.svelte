@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from '../components/Select.svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import {
     Bookmark as BookmarkIcon, ChevronRight, Copy, ExternalLink, Folder, FolderOpen, FolderPlus, Inbox, Layers, Pencil, Plus,
@@ -74,6 +75,10 @@
     walk(null, 0);
     return out;
   }
+
+  /** Folders as dropdown choices, indented by depth and marked with their color. */
+  const folderOptions = (exclude = new Set<number>()) =>
+    flatFolders(exclude).map(({ folder, depth }) => ({ value: folder.id as number | null, label: folder.name, depth, color: hex(folder.color) }));
 
   const query = $derived(search.trim().toLowerCase());
   const visible = $derived(
@@ -369,12 +374,11 @@
     </div>
     <div class="field">
       <label for="bm-folder">{t('bm.folder')}</label>
-      <select id="bm-folder" class="select" bind:value={editingLink.folder_id}>
-        <option value={null}>{t('bm.unsorted')}</option>
-        {#each flatFolders() as { folder, depth } (folder.id)}
-          <option value={folder.id}>{'   '.repeat(depth)}{folder.name}</option>
-        {/each}
-      </select>
+      <Select
+        id="bm-folder"
+        bind:value={editingLink.folder_id}
+        options={[{ value: null, label: t('bm.unsorted') }, ...folderOptions()]}
+      />
     </div>
     <div class="field">
       <label for="bm-note">{t('bm.note')}</label>
@@ -402,12 +406,11 @@
     </div>
     <div class="field">
       <label for="bm-fparent">{t('bm.parent')}</label>
-      <select id="bm-fparent" class="select" bind:value={editingFolder.parent_id}>
-        <option value={null}>{t('bm.topLevel')}</option>
-        {#each flatFolders(editingFolder.id ? descendantsOf(editingFolder.id) : new Set()) as { folder, depth } (folder.id)}
-          <option value={folder.id}>{'   '.repeat(depth)}{folder.name}</option>
-        {/each}
-      </select>
+      <Select
+        id="bm-fparent"
+        bind:value={editingFolder.parent_id}
+        options={[{ value: null, label: t('bm.topLevel') }, ...folderOptions(editingFolder.id ? descendantsOf(editingFolder.id) : new Set())]}
+      />
     </div>
     <div class="field">
       <span class="label">{t('common.color')}</span>

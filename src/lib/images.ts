@@ -7,8 +7,16 @@ import { t } from './i18n.svelte';
 /** Dev browser preview keeps imported images as blob URLs (see lib/mock.ts). */
 type PreviewWindow = Window & { __noraPreviewImages?: Map<string, string> };
 
-export function imageUrl(name: string): string {
-  return (window as PreviewWindow).__noraPreviewImages?.get(name) ?? convertFileSrc(name, 'noraimg');
+/**
+ * URL of a stored image. `variant` gives the same file a separate address: WebKit shares
+ * one animation between all <img>s with the same URL, so an animated GIF placed on a page
+ * would stall when its thumbnail elsewhere disappears. The server ignores the query.
+ */
+export function imageUrl(name: string, variant?: string): string {
+  const preview = (window as PreviewWindow).__noraPreviewImages?.get(name);
+  if (preview) return preview;
+  const url = convertFileSrc(name, 'noraimg');
+  return variant ? `${url}?${encodeURIComponent(variant)}` : url;
 }
 
 /** Re-encodes an image the webview can display but Rust can't decode (e.g. HEIC) as PNG. */

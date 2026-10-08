@@ -1,9 +1,11 @@
 <script lang="ts">
   // Repeat rule editor: frequency, interval, weekdays (weekly) and when the series ends.
   import { Repeat as RepeatIcon } from '@lucide/svelte';
+  import Select from './Select.svelte';
   import type { Freq, Repeat } from '../lib/api';
   import { parseYmd, weekdayNames } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
+  import DateField from './DateField.svelte';
 
   let { value = $bindable(), startDate }: { value: Repeat | null; startDate: string } = $props();
 
@@ -44,10 +46,14 @@
 <div class="repeat">
   <div class="row head">
     <RepeatIcon size={16} />
-    <select class="select" value={value?.freq ?? 'none'} onchange={(e) => setFreq(e.currentTarget.value)} aria-label={t('rep.label')}>
-      <option value="none">{t('rep.none')}</option>
-      {#each FREQS as f (f)}<option value={f}>{t(`rep.${f}`)}</option>{/each}
-    </select>
+    <div class="freq">
+      <Select
+        value={value?.freq ?? 'none'}
+        options={[{ value: 'none', label: t('rep.none') }, ...FREQS.map((f) => ({ value: f as string, label: t(`rep.${f}`) }))]}
+        onchange={setFreq}
+        label={t('rep.label')}
+      />
+    </div>
   </div>
 
   {#if value}
@@ -76,7 +82,9 @@
         <button type="button" class:active={ends === 'count'} onclick={() => setEnds('count')}>{t('rep.after')}</button>
       </div>
       {#if ends === 'date'}
-        <input class="input date" type="date" min={startDate} value={value.until} onchange={(e) => value && (value.until = e.currentTarget.value || startDate)} />
+        <div class="date">
+          <DateField value={value.until} min={startDate} label={t('rep.onDate')} onchange={(v) => value && (value.until = v || startDate)} />
+        </div>
       {:else if ends === 'count'}
         <input class="input num" type="number" min="1" max="999" bind:value={value.count} />
         <span class="muted">{t('rep.times')}</span>
@@ -100,8 +108,11 @@
   .head {
     color: var(--muted);
   }
-  .head .select {
+  .freq {
     flex: 1;
+    min-width: 0;
+  }
+  .freq :global(.select-btn) {
     background: var(--surface);
   }
   .lbl {
@@ -115,8 +126,8 @@
     background: var(--surface);
   }
   .date {
-    width: auto;
-    background: var(--surface);
+    flex: 1 1 210px;
+    min-width: 0;
   }
   .days {
     display: flex;

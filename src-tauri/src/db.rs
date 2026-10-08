@@ -67,12 +67,20 @@ CREATE TABLE IF NOT EXISTS todos (
 );
 CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_id);
 
+CREATE TABLE IF NOT EXISTS memo_groups (
+    id       INTEGER PRIMARY KEY,
+    name     TEXT    NOT NULL,
+    color    INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS memos (
     id         INTEGER PRIMARY KEY,
     title      TEXT    NOT NULL,
     body       TEXT    NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    group_id   INTEGER REFERENCES memo_groups(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS pomodoro_sessions (
@@ -278,6 +286,14 @@ pub struct Memo {
     pub body: String,
     pub created_at: i64,
     pub updated_at: i64,
+    pub group_id: Option<i64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MemoGroup {
+    pub id: i64,
+    pub name: String,
+    pub color: u32,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -420,6 +436,12 @@ fn migrate(conn: &Connection) -> DbResult<()> {
         .exists([])?;
     if !has_cancelled {
         conn.execute_batch("ALTER TABLE events ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0")?;
+    }
+    let has_memo_group = conn
+        .prepare("SELECT 1 FROM pragma_table_info('memos') WHERE name = 'group_id'")?
+        .exists([])?;
+    if !has_memo_group {
+        conn.execute_batch("ALTER TABLE memos ADD COLUMN group_id INTEGER REFERENCES memo_groups(id) ON DELETE SET NULL")?;
     }
     let has_tags = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'tags'")?
@@ -806,7 +828,7 @@ impl Db {
 
     pub fn memos(&self) -> DbResult<Vec<Memo>> {
         let mut st = self.conn.prepare(
-            "SELECT id, title, body, created_at, updated_at FROM memos ORDER BY updated_at DESC, id DESC",
+            "SELECT id, title, body, created_at, updated_at, group_id FROM memos ORDER BY updated_at DESC, id DESC",
         )?;
         st.query_map([], |r| {
             Ok(Memo {
@@ -815,18 +837,52 @@ impl Db {
                 body: r.get(2)?,
                 created_at: r.get(3)?,
                 updated_at: r.get(4)?,
+                group_id: r.get(5)?,
             })
         })?
         .collect()
     }
 
-    pub fn create_memo(&self, title: &str) -> DbResult<i64> {
+    pub fn create_memo(&self, title: &str, group_id: Option<i64>) -> DbResult<i64> {
         let now = now_ts();
         self.conn.execute(
-            "INSERT INTO memos(title, body, created_at, updated_at) VALUES(?1, '', ?2, ?2)",
-            params![title, now],
+            "INSERT INTO memos(title, body, created_at, updated_at, group_id) VALUES(?1, '', ?2, ?2, ?3)",
+            params![title, now, group_id],
         )?;
         Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Moves a memo to a group (`None` = ungrouped). Does not change its "edited" time.
+    pub fn set_memo_group(&self, id: i64, group_id: Option<i64>) -> DbResult<()> {
+        self.conn.execute("UPDATE memos SET group_id=?1 WHERE id=?2", params![group_id, id])?;
+        Ok(())
+    }
+
+    pub fn memo_groups(&self) -> DbResult<Vec<MemoGroup>> {
+        let mut st = self.conn.prepare("SELECT id, name, color FROM memo_groups ORDER BY position, id")?;
+        st.query_map([], |r| Ok(MemoGroup { id: r.get(0)?, name: r.get(1)?, color: r.get(2)? }))?
+            .collect()
+    }
+
+    pub fn save_memo_group(&self, g: &MemoGroup) -> DbResult<i64> {
+        if g.id == 0 {
+            self.conn.execute(
+                "INSERT INTO memo_groups(name, color, position)
+                 VALUES(?1, ?2, (SELECT COALESCE(MAX(position), 0) + 1 FROM memo_groups))",
+                params![g.name, g.color],
+            )?;
+            Ok(self.conn.last_insert_rowid())
+        } else {
+            self.conn.execute("UPDATE memo_groups SET name=?1, color=?2 WHERE id=?3", params![g.name, g.color, g.id])?;
+            Ok(g.id)
+        }
+    }
+
+    /// Deletes a group; its memos become ungrouped (they are never deleted with it).
+    pub fn delete_memo_group(&self, id: i64) -> DbResult<()> {
+        self.conn.execute("UPDATE memos SET group_id=NULL WHERE group_id=?1", [id])?;
+        self.conn.execute("DELETE FROM memo_groups WHERE id=?1", [id])?;
+        Ok(())
     }
 
     pub fn update_memo(&self, id: i64, title: &str, body: &str) -> DbResult<()> {
@@ -1135,6 +1191,50 @@ pub(crate) mod tests {
             .map(|e| e.start)
             .collect();
         assert_eq!(series_days, [dt("2026-10-05 10:00"), dt("2026-10-07 10:00"), dt("2026-10-08 10:00")]);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn memo_groups_keep_their_memos_safe() {
+        let (db, path) = temp_db();
+        let work = db.save_memo_group(&MemoGroup { id: 0, name: "Work".into(), color: 1 }).unwrap();
+        let a = db.create_memo("Plan", Some(work)).unwrap();
+        let b = db.create_memo("Loose", None).unwrap();
+        db.update_memo(b, "Loose", "text").unwrap();
+        let before = db.memos().unwrap().iter().find(|m| m.id == b).unwrap().updated_at;
+        db.set_memo_group(b, Some(work)).unwrap();
+        let memos = db.memos().unwrap();
+        assert!(memos.iter().all(|m| m.group_id == Some(work)));
+        assert_eq!(memos.iter().find(|m| m.id == b).unwrap().updated_at, before, "moving is not an edit");
+
+        db.save_memo_group(&MemoGroup { id: work, name: "Office".into(), color: 2 }).unwrap();
+        assert_eq!(db.memo_groups().unwrap()[0].name, "Office");
+        db.delete_memo_group(work).unwrap();
+        assert!(db.memo_groups().unwrap().is_empty());
+        let memos = db.memos().unwrap();
+        assert_eq!(memos.len(), 2, "deleting a group keeps its memos");
+        assert!(memos.iter().all(|m| m.group_id.is_none()));
+        assert!(memos.iter().any(|m| m.id == a));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn migration_adds_memo_groups_to_old_databases() {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let path = std::env::temp_dir().join(format!("nora_oldmemo_{}_{}.sqlite3", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+        let _ = std::fs::remove_file(&path);
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE memos (id INTEGER PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL DEFAULT '',
+                 created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+                 INSERT INTO memos(title, body, created_at, updated_at) VALUES('old note', 'hi', 0, 0);",
+            )
+            .unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        let memos = db.memos().unwrap();
+        assert_eq!((memos[0].title.as_str(), memos[0].group_id), ("old note", None));
         let _ = std::fs::remove_file(path);
     }
 

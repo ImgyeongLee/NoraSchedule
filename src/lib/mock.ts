@@ -2,7 +2,7 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC } from '@tauri-apps/api/mocks';
-import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, PomodoroSession, Tag, Todo, TodoGroup } from './api';
+import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, MemoGroup, PomodoroSession, Tag, Todo, TodoGroup } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
@@ -91,9 +91,10 @@ export function installMock() {
     todo(7, 'Renew passport', 2, null, false, addDays(t, -1)),
   ];
   const memos: Memo[] = [
-    { id: 1, title: 'Weekly sync', body: '# Weekly sync\n\n- [x] Review roadmap\n- [ ] Plan **Q4** goals\n\n> Keep it simple.\n\n```rust\nfn main() {}\n```\n\n한국어도 잘 보입니다.', created_at: now, updated_at: now },
-    { id: 2, title: 'Ideas', body: 'A calm, friendly scheduler.', created_at: now - 3600, updated_at: now - 3600 },
+    { id: 1, title: 'Weekly sync', body: '# Weekly sync\n\n- [x] Review roadmap\n- [ ] Plan **Q4** goals\n\n> Keep it simple.\n\n```rust\nfn main() {}\n```\n\n한국어도 잘 보입니다.', created_at: now, updated_at: now, group_id: 1 },
+    { id: 2, title: 'Ideas', body: 'A calm, friendly scheduler.', created_at: now - 3600, updated_at: now - 3600, group_id: null },
   ];
+  const memoGroups: MemoGroup[] = [{ id: 1, name: 'Work', color: 0x7c74ff }, { id: 2, name: 'Diary', color: 0x34c38f }];
   const sessions: PomodoroSession[] = [];
   const activity: Activity[] = [];
   const apps: [string, string][] = [['Code', 'main.rs — NoraSchedule'], ['Google Chrome', 'Svelte docs'], ['Slack', '#general'], ['Figma', 'Nora UI']];
@@ -213,7 +214,17 @@ export function installMock() {
       }
       case 'delete_todo': { const drop = (id: number) => { todos.filter((c) => c.parent_id === id).forEach((c) => drop(c.id)); todos.splice(todos.findIndex((x) => x.id === id), 1); }; drop(a.id); return null; }
       case 'memos': return [...memos].sort((x, y) => y.updated_at - x.updated_at);
-      case 'create_memo': memos.push({ id: nextId, title: a.title, body: '', created_at: now, updated_at: Date.now() / 1000 }); return nextId++;
+      case 'create_memo': memos.push({ id: nextId, title: a.title, body: '', created_at: now, updated_at: Date.now() / 1000, group_id: a.groupId ?? null }); return nextId++;
+      case 'set_memo_group': memos.find((m) => m.id === a.id)!.group_id = a.groupId; return null;
+      case 'memo_groups': return memoGroups;
+      case 'save_memo_group': {
+        if (a.group.id) { Object.assign(memoGroups.find((g) => g.id === a.group.id)!, a.group); return a.group.id; }
+        memoGroups.push({ ...a.group, id: nextId }); return nextId++;
+      }
+      case 'delete_memo_group': {
+        memos.forEach((m) => m.group_id === a.id && (m.group_id = null));
+        memoGroups.splice(memoGroups.findIndex((g) => g.id === a.id), 1); return null;
+      }
       case 'update_memo': Object.assign(memos.find((m) => m.id === a.id)!, { title: a.title, body: a.body, updated_at: Date.now() / 1000 }); return null;
       case 'delete_memo': memos.splice(memos.findIndex((m) => m.id === a.id), 1); return null;
       case 'add_pomodoro_session': sessions.push({ started_at: a.startedAt, ended_at: a.endedAt, label: a.label }); return null;

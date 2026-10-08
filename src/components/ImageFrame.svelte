@@ -57,7 +57,7 @@
   role="presentation"
 >
   <img
-    src={imageUrl(image)}
+    src={imageUrl(image, 'frame')}
     alt=""
     draggable="false"
     onload={(e) => {

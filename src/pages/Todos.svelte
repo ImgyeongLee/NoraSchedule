@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Select from '../components/Select.svelte';
   import { FolderPlus, Inbox, Layers, PartyPopper, Pencil, Plus, Sparkles, Sun } from '@lucide/svelte';
   import TodoItem from './TodoItem.svelte';
   import Modal from '../components/Modal.svelte';
@@ -199,10 +200,11 @@
     {#if editing.parent_id === null}
       <div class="field">
         <label for="todo-group">{t('todo.group')}</label>
-        <select id="todo-group" class="select" bind:value={editing.group_id}>
-          <option value={null}>{t('todo.ungrouped')}</option>
-          {#each groups as g (g.id)}<option value={g.id}>{g.name}</option>{/each}
-        </select>
+        <Select
+          id="todo-group"
+          bind:value={editing.group_id}
+          options={[{ value: null, label: t('todo.ungrouped') }, ...groups.map((g) => ({ value: g.id as number | null, label: g.name, color: hex(g.color) }))]}
+        />
       </div>
     {/if}
     <div class="field">

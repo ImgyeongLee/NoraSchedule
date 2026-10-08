@@ -98,7 +98,11 @@
       onpointercancel={() => (gesture = null)}
       role="presentation"
     >
-      <img src={imageUrl(s.image)} alt="" draggable="false" />
+      <!-- Own URL (not shared with the tray thumbnails) and re-created when decorating ends,
+           so animated GIFs keep playing after the sticker box closes. -->
+      {#key stickers.editing}
+        <img src={imageUrl(s.image, 'placed')} alt="" draggable="false" />
+      {/key}
       {#if selected}
         <button class="handle del" onpointerdown={(e) => e.stopPropagation()} onclick={() => removeSticker(s.id)} title={t('sticker.remove')}><X size={13} /></button>
         <button class="handle front" onpointerdown={(e) => e.stopPropagation()} onclick={() => bringToFront(s.id)} title={t('sticker.front')}><BringToFront size={13} /></button>

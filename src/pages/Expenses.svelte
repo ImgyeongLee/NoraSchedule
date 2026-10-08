@@ -1,9 +1,11 @@
 <script lang="ts">
+  import Select from '../components/Select.svelte';
   import { onMount } from 'svelte';
   import {
     CalendarDays, ChevronLeft, ChevronRight, CopyPlus, Pencil, PiggyBank, Plus, Receipt, Settings2, Trash, TrendingDown, TrendingUp, Wallet,
   } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
+  import DateField from '../components/DateField.svelte';
   import StatCard from '../components/StatCard.svelte';
   import BarChart from '../components/BarChart.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
@@ -206,7 +208,7 @@
         {/each}
       </div>
       <div class="row">
-        <input class="input date" type="date" bind:value={date} aria-label={t('common.date')} />
+        <div class="date"><DateField value={date} label={t('common.date')} onchange={(v) => v && (date = v)} /></div>
         <input class="input" placeholder={t('ex.notePlaceholder')} bind:value={note} onkeydown={(e) => e.key === 'Enter' && add()} />
       </div>
       <button class="btn primary add-btn" onclick={add}><Plus size={17} /> {t('ex.add')}</button>
@@ -288,7 +290,7 @@
       </div>
     </div>
     <div class="row">
-      <input class="input date" type="date" bind:value={editing.date} aria-label={t('common.date')} />
+      <div class="date"><DateField value={editing.date} label={t('common.date')} onchange={(v) => editing && v && (editing.date = v)} /></div>
       <input class="input" placeholder={t('ex.notePlaceholder')} bind:value={editing.note} />
     </div>
     {#snippet footer()}
@@ -304,9 +306,7 @@
   <Modal title={t('ex.settings')} onclose={() => (settingsOpen = false)} width={420}>
     <div class="field">
       <label for="ex-currency">{t('ex.currency')}</label>
-      <select id="ex-currency" class="select" bind:value={settingsForm.currency}>
-        {#each CURRENCIES as c (c)}<option value={c}>{c} · {currencySymbol(c)}</option>{/each}
-      </select>
+      <Select id="ex-currency" bind:value={settingsForm.currency} options={CURRENCIES.map((c) => ({ value: c as string, label: `${c} · ${currencySymbol(c)}` }))} />
     </div>
     <div class="field">
       <label for="ex-budget">{t('ex.budget')}</label>
@@ -478,8 +478,8 @@
     border-radius: 9px;
   }
   .date {
-    width: auto;
-    flex: none;
+    flex: 0 0 210px;
+    min-width: 0;
   }
   .add-btn {
     height: 44px;

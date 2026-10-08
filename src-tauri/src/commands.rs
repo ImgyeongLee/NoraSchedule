@@ -9,7 +9,7 @@ use crate::AppState;
 use crate::backup::{self, Manifest};
 use crate::bookmarks::{Bookmark, BookmarkFolder};
 use crate::expenses::Expense;
-use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, PomodoroSession, Scope, Tag, Todo, TodoGroup};
+use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, MemoGroup, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
 
 type CmdResult<T> = Result<T, String>;
@@ -227,8 +227,32 @@ pub fn memos(state: State<AppState>) -> CmdResult<Vec<Memo>> {
 }
 
 #[tauri::command]
-pub fn create_memo(state: State<AppState>, title: String) -> CmdResult<i64> {
-    with_db(&state, |db| db.create_memo(&title))
+pub fn create_memo(state: State<AppState>, title: String, group_id: Option<i64>) -> CmdResult<i64> {
+    with_db(&state, |db| db.create_memo(&title, group_id))
+}
+
+#[tauri::command]
+pub fn set_memo_group(state: State<AppState>, id: i64, group_id: Option<i64>) -> CmdResult<()> {
+    with_db(&state, |db| db.set_memo_group(id, group_id))
+}
+
+#[tauri::command]
+pub fn memo_groups(state: State<AppState>) -> CmdResult<Vec<MemoGroup>> {
+    with_db(&state, |db| db.memo_groups())
+}
+
+#[tauri::command]
+pub fn save_memo_group(state: State<AppState>, group: MemoGroup) -> CmdResult<i64> {
+    let name = group.name.trim();
+    if name.is_empty() {
+        return Err("A group needs a name.".into());
+    }
+    with_db(&state, |db| db.save_memo_group(&MemoGroup { name: name.into(), ..group }))
+}
+
+#[tauri::command]
+pub fn delete_memo_group(state: State<AppState>, id: i64) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_memo_group(id))
 }
 
 #[tauri::command]

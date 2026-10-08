@@ -138,6 +138,13 @@ export interface Memo {
   body: string;
   created_at: number;
   updated_at: number;
+  group_id: number | null;
+}
+
+export interface MemoGroup {
+  id: number;
+  name: string;
+  color: number;
 }
 
 export interface PomodoroSession {
@@ -237,7 +244,11 @@ export const api = {
   deleteExpense: (id: number) => invoke<Expense | null>('delete_expense', { id }),
 
   memos: () => invoke<Memo[]>('memos'),
-  createMemo: (title: string) => invoke<number>('create_memo', { title }),
+  createMemo: (title: string, groupId: number | null = null) => invoke<number>('create_memo', { title, groupId }),
+  setMemoGroup: (id: number, groupId: number | null) => invoke<void>('set_memo_group', { id, groupId }),
+  memoGroups: () => invoke<MemoGroup[]>('memo_groups'),
+  saveMemoGroup: (group: MemoGroup) => invoke<number>('save_memo_group', { group }),
+  deleteMemoGroup: (id: number) => invoke<void>('delete_memo_group', { id }),
   updateMemo: (id: number, title: string, body: string) => invoke<void>('update_memo', { id, title, body }),
   deleteMemo: (id: number) => invoke<void>('delete_memo', { id }),
 

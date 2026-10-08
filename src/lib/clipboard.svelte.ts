@@ -3,7 +3,7 @@
 // Items are copied to an in-app clipboard (and as plain text to the system clipboard, so
 // they can be pasted into other apps). Whatever the mouse is over decides what is copied
 // and where a paste lands; each page also registers a fallback paste target.
-import { Ban, ClipboardPaste, Copy, CopyPlus, Pencil, RotateCcw, Trash } from '@lucide/svelte';
+import { CircleCheck, ClipboardPaste, Copy, CopyPlus, Pencil, RotateCcw, Trash } from '@lucide/svelte';
 import { api, type CalEvent, type Todo } from './api';
 import { DEFAULT_COLOR } from './colors';
 import { addDays, addMinutes, dateOf, diffDays, pad, timeOf, toDateTime } from './dates';
@@ -226,7 +226,7 @@ export function eventMenu(e: CalEvent, onEdit: () => void): MenuItem[] {
     'separator',
     e.cancelled
       ? { label: t('menu.uncancelEvent'), icon: RotateCcw, action: () => setEventCancelled(e, false) }
-      : { label: t('menu.cancelEvent'), icon: Ban, action: () => setEventCancelled(e, true) },
+      : { label: t('menu.cancelEvent'), icon: CircleCheck, action: () => setEventCancelled(e, true) },
     { label: t('menu.delete'), icon: Trash, danger: true, action: () => deleteEventWithUndo(e) },
   ];
 }

@@ -4,6 +4,7 @@
   import ColorPicker from '../components/ColorPicker.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
   import ImagePicker from '../components/ImagePicker.svelte';
+  import DateField from '../components/DateField.svelte';
   import { imageUrl } from '../lib/images';
   import { api, type DDay } from '../lib/api';
   import { PALETTE, hex } from '../lib/colors';
@@ -121,7 +122,7 @@
     </div>
     <div class="field">
       <label for="dd-date">{t('common.date')}</label>
-      <input id="dd-date" class="input" type="date" bind:value={editing.date} />
+      <DateField id="dd-date" value={editing.date} onchange={(v) => editing && v && (editing.date = v)} />
       {#if editing.date}<span class="preview" style:color={hex(editing.color)}>{ddayLabel(editing)} · {relative(editing)}</span>{/if}
     </div>
     <div class="field options">

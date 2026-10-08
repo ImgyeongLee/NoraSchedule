@@ -1,6 +1,7 @@
 <script lang="ts">
+  import Select from '../components/Select.svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
-  import { Ban, Bell, Link, MapPin, Plus, RotateCcw, Trash, X } from '@lucide/svelte';
+  import { Bell, CircleCheck, Link, MapPin, Plus, RotateCcw, Trash, X } from '@lucide/svelte';
   import TagManager from '../components/TagManager.svelte';
   import { hex } from '../lib/colors';
   import { MAX_REMINDER_MINUTES, REMINDER_PRESETS, reminderLabel } from '../lib/reminders';
@@ -9,6 +10,8 @@
   import ColorPicker from '../components/ColorPicker.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
   import RepeatEditor from '../components/RepeatEditor.svelte';
+  import DateField from '../components/DateField.svelte';
+  import TimeField from '../components/TimeField.svelte';
   import { deleteEventWithUndo, setEventCancelled } from '../lib/clipboard.svelte';
   import { askScope, isRepeatingOccurrence } from '../lib/prompt.svelte';
   import { api, type CalEvent } from '../lib/api';
@@ -134,7 +137,7 @@
 
 <Modal title={isNew ? t('event.new') : t('event.edit')} {onclose} width={540}>
   {#if event.cancelled}
-    <p class="cancelled-note"><Ban size={15} /> {t('event.cancelledNote')}</p>
+    <p class="cancelled-note"><CircleCheck size={15} /> {t('event.cancelledNote')}</p>
   {/if}
   <!-- svelte-ignore a11y_autofocus -->
   <input class="input title" placeholder={t('event.titlePlaceholder')} bind:value={form.title} autofocus {onkeydown} />
@@ -148,15 +151,15 @@
       <div class="field">
         <label for="ev-start">{t('event.starts')}</label>
         <div class="row">
-          <input id="ev-start" class="input" type="date" bind:value={form.startDate} onchange={startChanged} />
-          {#if !form.allDay}<input class="input time" type="time" bind:value={form.startTime} onchange={startChanged} />{/if}
+          <DateField id="ev-start" value={form.startDate} onchange={(v) => { if (v) form.startDate = v; startChanged(); }} />
+          {#if !form.allDay}<TimeField bind:value={form.startTime} onchange={startChanged} label={t('event.starts')} />{/if}
         </div>
       </div>
       <div class="field">
         <label for="ev-end">{t('event.ends')}</label>
         <div class="row">
-          <input id="ev-end" class="input" type="date" bind:value={form.endDate} min={form.startDate} />
-          {#if !form.allDay}<input class="input time" type="time" bind:value={form.endTime} />{/if}
+          <DateField id="ev-end" value={form.endDate} min={form.startDate} onchange={(v) => v && (form.endDate = v)} />
+          {#if !form.allDay}<TimeField bind:value={form.endTime} label={t('event.ends')} />{/if}
         </div>
       </div>
     </div>
@@ -171,10 +174,14 @@
     <label for="ev-remind">{t('remind.label')}</label>
     <div class="row remind">
       <Bell size={16} />
-      <select id="ev-remind" class="select" value={reminderChoice} onchange={(e) => pickReminder(e.currentTarget.value)}>
-        {#each REMINDER_PRESETS as m (m)}<option value={String(m)}>{reminderLabel(m)}</option>{/each}
-        <option value="custom">{t('remind.custom')}</option>
-      </select>
+      <div class="remind-pick">
+        <Select
+          id="ev-remind"
+          value={reminderChoice}
+          options={[...REMINDER_PRESETS.map((m) => ({ value: String(m), label: reminderLabel(m) })), { value: 'custom', label: t('remind.custom') }]}
+          onchange={pickReminder}
+        />
+      </div>
       {#if customReminder}
         <input class="input minutes" type="number" min="1" max={MAX_REMINDER_MINUTES} bind:value={form.reminder} />
         <span class="muted">{t('remind.minutesBefore')}</span>
@@ -249,7 +256,7 @@
     {/if}
     {#if !isNew}
       <button class="btn" onclick={toggleCancelled}>
-        {#if event.cancelled}<RotateCcw size={16} /> {t('event.uncancel')}{:else}<Ban size={16} /> {t('event.cancelEvent')}{/if}
+        {#if event.cancelled}<RotateCcw size={16} /> {t('event.uncancel')}{:else}<CircleCheck size={16} /> {t('event.cancelEvent')}{/if}
       </button>
     {/if}
     <span class="spacer"></span>
@@ -280,7 +287,8 @@
     border-radius: var(--radius);
     background: var(--surface-2);
   }
-  .when .input {
+  .when :global(.date-field),
+  .when :global(.time-field) {
     background: var(--surface);
   }
   .repeat-box {
@@ -294,25 +302,14 @@
     cursor: pointer;
     width: fit-content;
   }
+  /* Starts and Ends each get a full row: the date in words, then the time. */
   .times {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
-  .times input[type='date'] {
-    flex: 1;
-    width: auto;
-  }
   .times .row {
-    gap: 6px;
-  }
-  .times .input {
-    min-width: 0;
-    padding: 0 8px;
-  }
-  .time {
-    width: 96px;
-    flex: none;
+    gap: 8px;
   }
   .with-icon {
     position: relative;
@@ -356,8 +353,8 @@
     gap: 8px;
     color: var(--faint);
   }
-  .remind .select {
-    width: auto;
+  .remind-pick {
+    width: 200px;
     flex: none;
   }
   .minutes {
@@ -406,10 +403,5 @@
     background: var(--surface-2);
     color: var(--muted);
     font-weight: 600;
-  }
-  @media (max-width: 620px) {
-    .times {
-      grid-template-columns: minmax(0, 1fr);
-    }
   }
 </style>

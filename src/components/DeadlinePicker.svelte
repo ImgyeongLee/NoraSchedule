@@ -1,7 +1,9 @@
 <script lang="ts">
   // Deadline editor: quick picks, a date and an optional time.
   // `compact` shows it behind a small button with a popover (used in the quick-add bar).
-  import { CalendarClock, Clock, X } from '@lucide/svelte';
+  import { CalendarClock, X } from '@lucide/svelte';
+  import DateField from './DateField.svelte';
+  import TimeField from './TimeField.svelte';
   import { fly } from 'svelte/transition';
   import { fmtDeadline, quickDates } from '../lib/deadline';
   import { t } from '../lib/i18n.svelte';
@@ -30,7 +32,9 @@
   }
 
   function onWindowDown(e: MouseEvent) {
-    if (open && root && !root.contains(e.target as Node)) open = false;
+    // Clicks inside the date/time pickers (which float in <body>) belong to this panel.
+    const target = e.target as Element;
+    if (open && root && !root.contains(target) && !target.closest?.('.popover')) open = false;
   }
 </script>
 
@@ -43,25 +47,13 @@
     {/each}
   </div>
   <div class="inputs">
-    <label class="date">
-      <CalendarClock size={16} />
-      <input
-        type="date"
-        class="input"
-        value={due ?? ''}
-        onchange={(e) => (due = e.currentTarget.value || null)}
-        aria-label={t('dl.pickDate')}
-      />
-    </label>
+    <div class="date"><DateField bind:value={due} label={t('dl.pickDate')} /></div>
     <label class="time-toggle">
       <input type="checkbox" class="switch" checked={time !== null} disabled={!due} onchange={(e) => toggleTime(e.currentTarget.checked)} />
       <span>{t('dl.addTime')}</span>
     </label>
     {#if time !== null && due}
-      <label class="date">
-        <Clock size={16} />
-        <input type="time" class="input" value={time} onchange={(e) => (time = e.currentTarget.value || null)} />
-      </label>
+      <TimeField value={time} onchange={(v) => (time = v)} label={t('dl.addTime')} />
     {/if}
   </div>
 {/snippet}
@@ -143,19 +135,8 @@
     gap: 10px;
   }
   .date {
-    position: relative;
-    display: flex;
-    align-items: center;
-    color: var(--faint);
-  }
-  .date :global(svg) {
-    position: absolute;
-    left: 11px;
-    pointer-events: none;
-  }
-  .date .input {
-    padding-left: 34px;
-    width: auto;
+    flex: 1 1 200px;
+    min-width: 0;
   }
   .time-toggle {
     display: flex;

@@ -10,12 +10,15 @@
     onpick,
     marks = new Set<string>(),
     events = [],
+    min,
   }: {
     selected: string;
     onpick: (d: string) => void;
     marks?: Set<string>;
     /** When given, hovering a day previews its events. */
     events?: CalEvent[];
+    /** Days before this date cannot be picked. */
+    min?: string;
   } = $props();
 
   let shownOverride = $state<string | null>(null);
@@ -46,6 +49,7 @@
         class:other={day.slice(0, 7) !== shown.slice(0, 7)}
         class:today={day === todayStr}
         class:selected={day === selected}
+        disabled={!!min && day < min}
         onclick={() => { hideHoverCard(); onpick(day); }}
         onmouseenter={(e) => showHoverCard(e.currentTarget, events.filter((ev) => covers(ev, day)), fmt(day, { month: 'long', day: 'numeric', weekday: 'short' }))}
         onmouseleave={hideHoverCard}
@@ -94,6 +98,10 @@
   }
   .day:hover {
     background: var(--surface-2);
+  }
+  .day:disabled {
+    opacity: 0.3;
+    cursor: default;
   }
   .day.other {
     color: var(--faint);
