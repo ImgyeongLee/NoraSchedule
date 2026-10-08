@@ -333,6 +333,7 @@
     height: 40px;
   }
   .brand {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -362,10 +363,25 @@
     font-size: 12px;
     color: var(--faint);
   }
+  /* In short windows the page list scrolls, so the buttons below it always stay visible. */
   nav {
     display: flex;
     flex-direction: column;
     gap: 3px;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
+  @media (max-height: 820px) {
+    .brand {
+      padding-bottom: 10px;
+    }
+    .sidebar .nav-item {
+      height: 36px;
+    }
   }
   .nav-item {
     display: flex;
@@ -407,6 +423,7 @@
     justify-content: center;
   }
   .mini-timer {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -449,6 +466,7 @@
     color: var(--text);
   }
   .tracker-pill {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 8px;

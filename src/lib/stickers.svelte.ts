@@ -102,7 +102,7 @@ export function placeSticker(image: string, page: Page) {
     x: clamp(0.5 + jitter(), 0.05, 0.95),
     y: clamp(0.45 + jitter(), 0.05, 0.95),
     w: 140,
-    rot: Math.round((Math.random() - 0.5) * 16),
+    rot: 0,
   };
   stickers.placed.push(sticker);
   stickers.selected = sticker.id;

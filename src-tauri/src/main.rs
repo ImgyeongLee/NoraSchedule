@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
+use tauri_plugin_window_state::StateFlags;
 
 pub struct AppState {
     pub db: Mutex<db::Db>,
@@ -47,6 +48,12 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        // Reopen at the size and position the window had when the app was last closed.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
+                .build(),
+        )
         .register_uri_scheme_protocol("noraimg", |ctx, request| serve_image(ctx.app_handle(), request))
         .setup(|app| {
             // NORA_DATA_DIR lets you point the app at a scratch database while developing.
