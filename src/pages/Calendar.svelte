@@ -7,7 +7,7 @@
   import { api, type CalEvent, type DDay } from '../lib/api';
   import { DEFAULT_COLOR, hex, textOn } from '../lib/colors';
   import {
-    addDays, addMonths, covers, ddayLabel, diffDays, eventSpan, fmt, fmtRange, isAllDayLane, monthStart, pad, range, timeOf,
+    addDays, addMonths, byDdayTarget, covers, ddayLabel, ddayOn, ddayUpcoming, diffDays, eventSpan, fmt, fmtRange, isAllDayLane, monthStart, pad, range, timeOf,
     today, toDateTime, weekStart,
   } from '../lib/dates';
   import { data, load, ui } from '../lib/state.svelte';
@@ -68,8 +68,8 @@
   const agendaTodos = $derived(todos.filter((x) => x.todo.due === cursor));
   const agenda = $derived(shownEvents.filter((e) => covers(e, cursor)));
   let managingTags = $state(false);
-  const agendaDdays = $derived(ddays.filter((d) => d.date === cursor));
-  const upcoming = $derived(ddays.filter((d) => d.date >= today()).slice(0, 4));
+  const agendaDdays = $derived(ddays.filter((d) => ddayOn(d, cursor)));
+  const upcoming = $derived(byDdayTarget(ddays.filter((d) => ddayUpcoming(d))).slice(0, 4));
 
   function step(dir: number) {
     cursor = view === 'month' ? addMonths(cursor, dir) : addDays(cursor, (view === 'week' ? 7 : 1) * dir);
@@ -227,7 +227,7 @@
         <div class="ddays">
           {#each upcoming as d (d.id)}
             <div class="dd">
-              <span class="dd-label" style:color={hex(d.color)} style:background="color-mix(in srgb, {hex(d.color)} 14%, transparent)">{ddayLabel(d.date)}</span>
+              <span class="dd-label" style:color={hex(d.color)} style:background="color-mix(in srgb, {hex(d.color)} 14%, transparent)">{ddayLabel(d)}</span>
               <span class="truncate">{d.title}</span>
             </div>
           {/each}

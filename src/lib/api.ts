@@ -20,6 +20,9 @@ export interface Repeat {
 }
 
 /** For repeating events: change only this occurrence, or the whole series. */
+/** What an uploaded image is for (see `Purpose` in src-tauri/src/images.rs). */
+export type ImagePurpose = 'cover' | 'header' | 'sticker';
+
 export type Scope = 'one' | 'all';
 
 export interface CalEvent {
@@ -69,6 +72,10 @@ export interface DDay {
   color: number;
   /** Cover image file name (see lib/images.ts), or null. */
   image: string | null;
+  /** Counts toward the same month and day every year (birthdays, anniversaries). */
+  yearly: boolean;
+  /** For past dates, count the date itself as day 1 (D+1) instead of day 0. */
+  count_from_one: boolean;
 }
 
 export interface TodoGroup {
@@ -202,7 +209,9 @@ export const api = {
   saveDday: (dday: DDay) => invoke<void>('save_dday', { dday }),
   deleteDday: (id: number) => invoke<void>('delete_dday', { id }),
   /** Sends raw image bytes; Rust optimizes and stores them and returns the file name. */
-  importImage: (bytes: Uint8Array) => invoke<string>('import_image', bytes),
+  /** `purpose` sets how large the image is kept; stickers keep transparency. */
+  importImage: (bytes: Uint8Array, purpose: ImagePurpose = 'cover') =>
+    invoke<string>('import_image', bytes, { headers: { purpose } }),
   removeUnusedImages: () => invoke<void>('remove_unused_images'),
 
   todoGroups: () => invoke<TodoGroup[]>('todo_groups'),

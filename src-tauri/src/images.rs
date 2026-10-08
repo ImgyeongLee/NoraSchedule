@@ -1,8 +1,8 @@
-//! D-Day cover images.
+//! User images: D-Day covers, the Overview header and image cards, and stickers.
 //!
 //! Uploads are re-encoded on import (EXIF-rotated, scaled down, saved as JPEG) so a
-//! 10 MB phone photo becomes a ~150 KB file. Files live in `<data dir>/images` and
-//! are deleted as soon as no D-Day references them.
+//! 10 MB phone photo becomes a ~150 KB file. Stickers with transparency are kept as PNG.
+//! Files live in `<data dir>/images` and are deleted as soon as nothing references them.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -11,12 +11,37 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use image::codecs::jpeg::JpegEncoder;
+use image::codecs::png::PngEncoder;
 use image::imageops::FilterType;
 use image::metadata::Orientation;
-use image::{DynamicImage, ImageDecoder, ImageReader, RgbImage};
+use image::{DynamicImage, ImageDecoder, ImageEncoder, ImageReader, RgbImage};
+use serde::Deserialize;
 
 /// Longest side after import. Cards are ~300 px wide, so this is sharp on retina screens.
 pub const MAX_SIDE: u32 = 1280;
+
+/// What an upload is for; decides how large it is kept and whether transparency survives.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Purpose {
+    /// D-Day covers and Overview image cards.
+    #[default]
+    Cover,
+    /// The wide Overview header, shown across the whole page.
+    Header,
+    /// Decorations; transparent images stay PNG.
+    Sticker,
+}
+
+impl Purpose {
+    fn max_side(self) -> u32 {
+        match self {
+            Purpose::Cover => MAX_SIDE,
+            Purpose::Header => 2400,
+            Purpose::Sticker => 640,
+        }
+    }
+}
 pub const JPEG_QUALITY: u8 = 82;
 /// Refuse absurdly large uploads before decoding them.
 pub const MAX_UPLOAD_BYTES: usize = 40 * 1024 * 1024;
@@ -45,8 +70,9 @@ impl From<std::io::Error> for ImageError {
     }
 }
 
-/// Decodes any supported image and returns an optimized JPEG.
-pub fn optimize(bytes: &[u8]) -> Result<Vec<u8>, ImageError> {
+/// Decodes any supported image and returns the optimized file and its extension
+/// (`jpg`, or `png` for stickers with transparency).
+pub fn optimize(bytes: &[u8], purpose: Purpose) -> Result<(Vec<u8>, &'static str), ImageError> {
     if bytes.len() > MAX_UPLOAD_BYTES {
         return Err(ImageError::TooLarge);
     }
@@ -56,9 +82,20 @@ pub fn optimize(bytes: &[u8]) -> Result<Vec<u8>, ImageError> {
     let mut img = DynamicImage::from_decoder(decoder).map_err(|_| ImageError::Unsupported)?;
     img.apply_orientation(orientation);
 
-    if img.width() > MAX_SIDE || img.height() > MAX_SIDE {
+    let max = purpose.max_side();
+    if img.width() > max || img.height() > max {
         // `resize` keeps the aspect ratio and fits inside the box.
-        img = img.resize(MAX_SIDE, MAX_SIDE, FilterType::CatmullRom);
+        img = img.resize(max, max, FilterType::CatmullRom);
+    }
+
+    // Only stickers that actually have see-through pixels need PNG; the rest are smaller as JPEG.
+    if purpose == Purpose::Sticker && img.color().has_alpha() && img.to_rgba8().pixels().any(|p| p.0[3] < 255) {
+        let rgba = img.to_rgba8();
+        let mut out = Vec::new();
+        PngEncoder::new(&mut out)
+            .write_image(rgba.as_raw(), rgba.width(), rgba.height(), image::ExtendedColorType::Rgba8)
+            .map_err(|_| ImageError::Unsupported)?;
+        return Ok((out, "png"));
     }
 
     let rgb = flatten_on_white(img);
@@ -66,7 +103,7 @@ pub fn optimize(bytes: &[u8]) -> Result<Vec<u8>, ImageError> {
     JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY)
         .encode_image(&rgb)
         .map_err(|_| ImageError::Unsupported)?;
-    Ok(out)
+    Ok((out, "jpg"))
 }
 
 /// JPEG has no transparency; composite transparent pixels over white.
@@ -86,21 +123,21 @@ fn flatten_on_white(img: DynamicImage) -> RgbImage {
 /// Only names this module generates are ever read or deleted.
 pub fn is_safe_name(name: &str) -> bool {
     name.len() <= 64
-        && name.ends_with(".jpg")
+        && (name.ends_with(".jpg") || name.ends_with(".png"))
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
         && !name.contains("..")
 }
 
 /// Writes the optimized image and returns its new file name.
-pub fn store(dir: &Path, jpeg: &[u8]) -> std::io::Result<String> {
+pub fn store(dir: &Path, bytes: &[u8], ext: &str) -> std::io::Result<String> {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     std::fs::create_dir_all(dir)?;
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or_default();
-    let name = format!("{nanos:x}-{:x}.jpg", COUNTER.fetch_add(1, Ordering::Relaxed));
-    std::fs::write(dir.join(&name), jpeg)?;
+    let name = format!("{nanos:x}-{:x}.{ext}", COUNTER.fetch_add(1, Ordering::Relaxed));
+    std::fs::write(dir.join(&name), bytes)?;
     Ok(name)
 }
 
@@ -135,7 +172,8 @@ mod tests {
     #[test]
     fn large_images_are_scaled_down_and_shrunk() {
         let input = png(3000, 2000, 255);
-        let output = optimize(&input).unwrap();
+        let (output, ext) = optimize(&input, Purpose::Cover).unwrap();
+        assert_eq!(ext, "jpg");
         let decoded = image::load_from_memory(&output).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (MAX_SIDE, 853), "keeps the aspect ratio");
         assert!(output.len() * 4 < input.len(), "{} -> {} bytes", input.len(), output.len());
@@ -143,7 +181,7 @@ mod tests {
 
     #[test]
     fn small_images_keep_their_size_and_transparency_becomes_white() {
-        let output = optimize(&png(40, 30, 0)).unwrap();
+        let (output, _) = optimize(&png(40, 30, 0), Purpose::Cover).unwrap();
         let decoded = image::load_from_memory(&output).unwrap().to_rgb8();
         assert_eq!(decoded.dimensions(), (40, 30));
         assert!(decoded.get_pixel(5, 5).0.iter().all(|&c| c > 245));
@@ -151,15 +189,26 @@ mod tests {
 
     #[test]
     fn rejects_non_images() {
-        assert!(matches!(optimize(b"definitely not an image"), Err(ImageError::Unsupported)));
+        assert!(matches!(optimize(b"definitely not an image", Purpose::Cover), Err(ImageError::Unsupported)));
+    }
+
+    #[test]
+    fn transparent_stickers_stay_png_and_keep_their_alpha() {
+        let (output, ext) = optimize(&png(2000, 1000, 0), Purpose::Sticker).unwrap();
+        assert_eq!(ext, "png");
+        let decoded = image::load_from_memory(&output).unwrap().to_rgba8();
+        assert_eq!(decoded.dimensions(), (640, 320));
+        assert_eq!(decoded.get_pixel(5, 5).0[3], 0);
+        // Opaque stickers are fine as JPEG.
+        assert_eq!(optimize(&png(40, 30, 255), Purpose::Sticker).unwrap().1, "jpg");
     }
 
     #[test]
     fn garbage_collection_keeps_referenced_files_only() {
         let dir = std::env::temp_dir().join(format!("nora_img_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let a = store(&dir, b"a").unwrap();
-        let b = store(&dir, b"b").unwrap();
+        let a = store(&dir, b"a", "jpg").unwrap();
+        let b = store(&dir, b"b", "png").unwrap();
         std::fs::write(dir.join("notes.txt"), "not ours").unwrap();
         assert_eq!(collect_garbage(&dir, &HashSet::from([a.clone()])), 1);
         assert!(dir.join(&a).exists());
@@ -173,6 +222,7 @@ mod tests {
         assert!(is_safe_name("18f3a-1.jpg"));
         assert!(!is_safe_name("../nora.sqlite3"));
         assert!(!is_safe_name("a/b.jpg"));
-        assert!(!is_safe_name("x.png"));
+        assert!(is_safe_name("18f3a-2.png"));
+        assert!(!is_safe_name("x.gif"));
     }
 }

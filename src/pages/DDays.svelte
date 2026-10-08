@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pencil, Plus, Target } from '@lucide/svelte';
+  import { Pencil, Plus, Repeat, Target } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
   import ColorPicker from '../components/ColorPicker.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
@@ -7,7 +7,7 @@
   import { imageUrl } from '../lib/images';
   import { api, type DDay } from '../lib/api';
   import { PALETTE, hex } from '../lib/colors';
-  import { ddayLabel, diffDays, fmt, today } from '../lib/dates';
+  import { byDdayTarget, ddayDays, ddayLabel, ddayTarget, ddayUpcoming, fmt, today } from '../lib/dates';
   import { data, load, mutate } from '../lib/state.svelte';
   import { t } from '../lib/i18n.svelte';
 
@@ -21,12 +21,13 @@
   });
 
   const todayStr = $derived(today());
-  const upcoming = $derived(ddays.filter((d) => d.date >= todayStr));
-  const past = $derived(ddays.filter((d) => d.date < todayStr).reverse());
+  const upcoming = $derived(byDdayTarget(ddays.filter((d) => ddayUpcoming(d, todayStr)), todayStr));
+  const past = $derived(ddays.filter((d) => !ddayUpcoming(d, todayStr)).reverse());
 
-  function relative(date: string) {
-    const n = diffDays(date, todayStr);
+  function relative(d: DDay) {
+    const n = ddayDays(d, todayStr);
     if (n === 0) return t('dd.today');
+    if (n < 0 && d.count_from_one) return t('dd.dayN', { n: -n });
     if (n === 1) return t('dd.tomorrow');
     if (n === -1) return t('dd.yesterday');
     return n > 0 ? t('dd.inDays', { n }) : t('dd.daysAgo', { n: -n });
@@ -34,7 +35,7 @@
 
   function create() {
     error = '';
-    editing = { id: 0, title: '', date: todayStr, color: PALETTE[(ddays.length + 4) % PALETTE.length].value, image: null };
+    editing = { id: 0, title: '', date: todayStr, color: PALETTE[(ddays.length + 4) % PALETTE.length].value, image: null, yearly: false, count_from_one: false };
   }
 
   /** Closing without saving: drop any photo that was uploaded but not kept. */
@@ -42,6 +43,9 @@
     editing = null;
     api.removeUnusedImages().catch(() => {});
   }
+
+  /** For yearly D-Days: which anniversary the next one is (1st, 2nd…); 0 before the first. */
+  const yearsOf = (d: DDay) => (d.yearly ? Number(ddayTarget(d, todayStr).slice(0, 4)) - Number(d.date.slice(0, 4)) : 0);
 
   async function save() {
     if (!editing) return;
@@ -94,10 +98,13 @@
           onclick={() => { error = ''; editing = { ...d }; }}
         >
           <span class="edit"><Pencil size={14} /></span>
-          <span class="countdown">{ddayLabel(d.date, todayStr)}</span>
+          <span class="countdown">{ddayLabel(d, todayStr)}</span>
           <span class="name truncate">{d.title}</span>
-          <span class="date">{fmt(d.date, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}</span>
-          <span class="rel">{relative(d.date)}</span>
+          <span class="date">
+            {#if d.yearly}<Repeat size={12} />{/if}
+            {fmt(ddayTarget(d, todayStr), { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
+          </span>
+          <span class="rel">{relative(d)}{#if yearsOf(d)} · {t('dd.nthYear', { n: yearsOf(d) })}{/if}</span>
         </button>
       {/each}
     </div>
@@ -115,7 +122,17 @@
     <div class="field">
       <label for="dd-date">{t('common.date')}</label>
       <input id="dd-date" class="input" type="date" bind:value={editing.date} />
-      {#if editing.date}<span class="preview" style:color={hex(editing.color)}>{ddayLabel(editing.date)} · {relative(editing.date)}</span>{/if}
+      {#if editing.date}<span class="preview" style:color={hex(editing.color)}>{ddayLabel(editing)} · {relative(editing)}</span>{/if}
+    </div>
+    <div class="field options">
+      <label class="row opt">
+        <input type="checkbox" class="switch" bind:checked={editing.yearly} />
+        <span><span class="opt-title">{t('dd.yearly')}</span><span class="muted small">{t('dd.yearlyBody')}</span></span>
+      </label>
+      <label class="row opt">
+        <input type="checkbox" class="switch" bind:checked={editing.count_from_one} />
+        <span><span class="opt-title">{t('dd.countFromOne')}</span><span class="muted small">{t('dd.countFromOneBody')}</span></span>
+      </label>
     </div>
     <div class="field">
       <span class="label">{t('common.color')}</span>
@@ -136,6 +153,21 @@
 {/if}
 
 <style>
+  .options {
+    gap: 10px;
+  }
+  .opt {
+    gap: 12px;
+    cursor: pointer;
+    align-items: center;
+  }
+  .opt > span {
+    display: flex;
+    flex-direction: column;
+  }
+  .opt-title {
+    font-weight: 650;
+  }
   .section {
     margin: 8px 0 12px;
     color: var(--muted);

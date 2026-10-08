@@ -5,7 +5,7 @@
   import BarList from '../components/BarList.svelte';
   import { api, type ActivitySummary, type CalEvent, type DDay, type PomodoroSession, type Todo, type TodoGroup } from '../lib/api';
   import { colorForName, hex } from '../lib/colors';
-  import { addDays, dayStartTs, ddayLabel, fmt, fmtDuration, fmtHours, range, today, tsToDate } from '../lib/dates';
+  import { addDays, byDdayTarget, dayStartTs, ddayLabel, ddayUpcoming, fmt, fmtDuration, fmtHours, range, today, tsToDate } from '../lib/dates';
   import { data, load } from '../lib/state.svelte';
   import { isOverdue } from '../lib/deadline';
   import { t } from '../lib/i18n.svelte';
@@ -53,7 +53,7 @@
   const doneInRange = $derived(todos.filter((t) => t.completed_at && t.completed_at >= firstTs).length);
   const rate = $derived(todos.length ? Math.round((doneTotal / todos.length) * 100) : 0);
   const focusTotal = $derived(sessions.reduce((s, x) => s + x.ended_at - x.started_at, 0));
-  const nextDday = $derived(ddays.find((d) => d.date >= todayStr));
+  const nextDday = $derived(byDdayTarget(ddays.filter((d) => ddayUpcoming(d, todayStr)), todayStr)[0]);
   const activeDays = $derived(Math.max(1, summary?.per_day.filter((s) => s > 0).length ?? 1));
   const busiest = $derived.by(() => {
     if (!summary) return null;
@@ -97,7 +97,7 @@
       <StatCard label={t('an.focusSessions')} value={String(sessions.length)} sub={t('an.focused', { d: fmtDuration(focusTotal) })} icon={Flame} tint="var(--focus)" />
       <StatCard label={t('an.todosCompleted')} value={String(doneInRange)} sub={t('an.stillOpen', { n: openTotal })} icon={CircleCheck} tint="var(--success)" />
       <StatCard label={t('an.eventsWeek')} value={String(upcoming.length)} sub={t('an.next7')} icon={CalendarDays} tint="var(--long-break)" />
-      <StatCard label={t('an.nextDday')} value={nextDday ? ddayLabel(nextDday.date) : '—'} sub={nextDday?.title ?? ''} icon={Target} tint="var(--warning)" />
+      <StatCard label={t('an.nextDday')} value={nextDday ? ddayLabel(nextDday) : '—'} sub={nextDday?.title ?? ''} icon={Target} tint="var(--warning)" />
     </div>
     <div class="grid-2">
       <div class="card"><h3>{t('an.workPerDay')}</h3><BarChart data={workPerDay} format={fmtHours} /></div>

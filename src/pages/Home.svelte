@@ -3,16 +3,16 @@
   import { api, type DDay } from '../lib/api';
   import { flip } from 'svelte/animate';
   import { fade } from 'svelte/transition';
-  import { ChevronLeft, ChevronRight, GripVertical, LayoutDashboard, Plus, Puzzle, RotateCcw, X } from '@lucide/svelte';
+  import { ChevronLeft, ChevronRight, GripVertical, ImagePlus, LayoutDashboard, Pencil, Plus, Puzzle, RotateCcw, X } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
   import { fmt, today } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
   import {
-    SIZES, WIDGETS, addTile, home, loadLayout, moveTile, removeTile, resetLayout, saveLayout, setTileDday, setTileSize,
-    type TileSize, type WidgetId,
+    HEADER_HEIGHTS, SIZES, WIDGETS, addTile, home, loadLayout, moveTile, removeTile, resetLayout, saveLayout, setHeader,
+    setTileDday, setTileSize, type HeaderHeight, type TileSize, type WidgetId,
   } from '../lib/home.svelte';
   import { data, load, toast } from '../lib/state.svelte';
-  import { ddayLabel, today as todayStr } from '../lib/dates';
+  import { byDdayTarget, ddayLabel, ddayUpcoming } from '../lib/dates';
   import DDayCardWidget from '../widgets/DDayCardWidget.svelte';
   import BookmarksWidget from '../widgets/BookmarksWidget.svelte';
   import ExpensesWidget from '../widgets/ExpensesWidget.svelte';
@@ -26,6 +26,9 @@
   import WeekChartWidget from '../widgets/WeekChartWidget.svelte';
   import ProgressWidget from '../widgets/ProgressWidget.svelte';
   import MemosWidget from '../widgets/MemosWidget.svelte';
+  import ImageCardWidget from '../widgets/ImageCardWidget.svelte';
+  import ImageFrame from '../components/ImageFrame.svelte';
+  import ImageFramer from '../components/ImageFramer.svelte';
 
   const COMPONENTS: Record<WidgetId, Component<any>> = {
     dday: DDayCardWidget,
@@ -41,9 +44,18 @@
     weekChart: WeekChartWidget,
     progress: ProgressWidget,
     memos: MemosWidget,
+    image: ImageCardWidget,
   };
 
   let editing = $state(false);
+  let editingHeader = $state(false);
+  let pageWidth = $state(900);
+  // The header editor keeps its own height choice until saved.
+  let headerHeight = $state<HeaderHeight>('md');
+  function openHeaderEditor() {
+    headerHeight = home.header.height;
+    editingHeader = true;
+  }
   let gallery = $state(false);
   let dragIndex = $state<number | null>(null);
 
@@ -61,7 +73,7 @@
   /** A new D-Day card shows an upcoming D-Day that no other card shows yet. */
   function nextUnusedDday(): number | null {
     const used = new Set(home.tiles.filter((t) => t.id === 'dday').map((t) => t.ddayId));
-    const upcoming = ddays.filter((d) => d.date >= todayStr());
+    const upcoming = byDdayTarget(ddays.filter((d) => ddayUpcoming(d)));
     return (upcoming.find((d) => !used.has(d.id)) ?? upcoming[0] ?? ddays[0])?.id ?? null;
   }
 
@@ -102,7 +114,13 @@
 </script>
 
 <div class="page">
-  <div class="page-header">
+  {#if home.header.image}
+    <div class="home-header" style:height="{HEADER_HEIGHTS[home.header.height]}px">
+      <ImageFrame image={home.header.image} framing={home.header.framing} />
+      <button class="header-edit" onclick={openHeaderEditor}><Pencil size={14} /> {t('home.headerEdit')}</button>
+    </div>
+  {/if}
+  <div class="page-header" bind:clientWidth={pageWidth}>
     <div>
       <h1>{t('nav.home')}</h1>
       <p class="sub">{editing ? t('home.dragHint') : fmt(today(), { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -110,6 +128,7 @@
     <span class="spacer"></span>
     {#if editing}
       <button class="btn ghost" onclick={() => { resetLayout(); toast(t('home.resetDone'), 'success'); }}><RotateCcw size={16} /> {t('home.reset')}</button>
+      <button class="btn" onclick={openHeaderEditor}><ImagePlus size={16} /> {home.header.image ? t('home.headerEdit') : t('home.headerAdd')}</button>
       <button class="btn" onclick={() => (gallery = true)}><Plus size={16} /> {t('home.addTile')}</button>
       <button class="btn primary" onclick={() => (editing = false)}>{t('home.done')}</button>
     {:else}
@@ -132,6 +151,7 @@
       {@const TileIcon = WIDGETS[tile.id].icon}
       <div
         class="tile {tile.size}"
+        class:bleed={tile.id === 'image'}
         class:dragging={dragIndex === i}
         animate:flip={{ duration: 220 }}
         draggable={editing}
@@ -141,7 +161,7 @@
         ondrop={(e) => e.preventDefault()}
         role="listitem"
       >
-        <div class="content" inert={editing}><Widget ddayId={tile.ddayId} /></div>
+        <div class="content" inert={editing}><Widget ddayId={tile.ddayId} uid={tile.uid} /></div>
         {#if editing}
           <div class="edit" transition:fade={{ duration: 120 }}>
             <div class="edit-top">
@@ -158,7 +178,7 @@
                 aria-label={t('w.dday.pick')}
               >
                 <option value="">{t('w.dday.auto')}</option>
-                {#each ddays as d (d.id)}<option value={d.id}>{ddayLabel(d.date)} · {d.title}</option>{/each}
+                {#each ddays as d (d.id)}<option value={d.id}>{ddayLabel(d)} · {d.title}</option>{/each}
               </select>
             {/if}
             <div class="sizes">
@@ -184,6 +204,32 @@
     {/if}
   </div>
 </div>
+
+{#if editingHeader}
+  <ImageFramer
+    title={t('home.headerTitle')}
+    image={home.header.image}
+    framing={home.header.framing}
+    width={Math.max(320, pageWidth)}
+    height={HEADER_HEIGHTS[headerHeight]}
+    longSide={2400}
+    purpose="header"
+    onsave={(image, framing) => setHeader({ image, framing, height: headerHeight })}
+    onremove={() => setHeader({ ...home.header, image: null })}
+    onclose={() => (editingHeader = false)}
+  >
+    {#snippet extra()}
+      <div class="row header-height">
+        <span class="strong">{t('home.headerHeight')}</span>
+        <div class="segmented">
+          {#each Object.keys(HEADER_HEIGHTS) as hh (hh)}
+            <button class:active={headerHeight === hh} onclick={() => (headerHeight = hh as HeaderHeight)}>{t(`home.headerHeight.${hh as HeaderHeight}`)}</button>
+          {/each}
+        </div>
+      </div>
+    {/snippet}
+  </ImageFramer>
+{/if}
 
 {#if gallery}
   <Modal title={t('home.addTileTitle')} onclose={() => (gallery = false)} width={620}>
@@ -250,6 +296,45 @@
   }
   .content {
     height: 100%;
+  }
+  .tile.bleed {
+    padding: 0;
+  }
+  .home-header {
+    position: relative;
+    margin-bottom: 20px;
+    border-radius: 24px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    background: var(--surface-2);
+  }
+  .header-edit {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 12.5px;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .home-header:hover .header-edit,
+  .header-edit:focus-visible {
+    opacity: 1;
+  }
+  .header-height {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
   }
   .editing .tile {
     cursor: grab;

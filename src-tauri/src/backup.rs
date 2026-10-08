@@ -268,7 +268,7 @@ mod tests {
             db.add_todo(None, None, "Pack bags", None, None).unwrap();
             db.set_setting("ui.locale", "ko").unwrap();
         }
-        let image = images::store(&old.join("images"), b"jpeg bytes").unwrap();
+        let image = images::store(&old.join("images"), b"jpeg bytes", "jpg").unwrap();
         let backup = old.join("Nora-backup.nora");
         let manifest = export(&old, &backup);
         assert_eq!((manifest.counts.todos, manifest.counts.images), (1, 1));
@@ -294,7 +294,7 @@ mod tests {
     fn reset_removes_everything_on_next_start() {
         let dir = temp_dir("reset");
         Db::open(&dir.join(DB_FILE)).unwrap().add_todo(None, None, "x", None, None).unwrap();
-        images::store(&dir.join("images"), b"x").unwrap();
+        images::store(&dir.join("images"), b"x", "jpg").unwrap();
         stage_reset(&dir).unwrap();
         assert!(dir.join(DB_FILE).exists(), "nothing is deleted until the restart");
         apply_pending(&dir).unwrap();

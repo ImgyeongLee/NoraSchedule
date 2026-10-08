@@ -1,7 +1,7 @@
 // Lays out calendar items over a row of consecutive days (a week in the month view, the
 // all-day row in the week view) so an event covering several days is one continuous bar.
 import type { CalEvent, DDay, Todo } from './api';
-import { diffDays, eventSpan, isAllDayLane } from './dates';
+import { ddayOn, diffDays, eventSpan, isAllDayLane } from './dates';
 
 /** A todo shown on its due day, in its group's color. */
 export type CalTodo = { todo: Todo; color: number };
@@ -29,9 +29,10 @@ export function layoutLanes(
   const last = days[days.length - 1];
   const items: Item[] = [];
   for (const d of ddays) {
-    if (d.date >= first && d.date <= last) {
-      items.push({ kind: 'dday', d, col: diffDays(d.date, first), span: 1, fromPrev: false, toNext: false });
-    }
+    // Yearly D-Days show on every anniversary.
+    days.forEach((day, col) => {
+      if (ddayOn(d, day)) items.push({ kind: 'dday', d, col, span: 1, fromPrev: false, toNext: false });
+    });
   }
   for (const e of events) {
     const [a, b] = eventSpan(e);

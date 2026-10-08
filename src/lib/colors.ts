@@ -30,3 +30,9 @@ export function textOn(n: number): string {
   const b = n & 255;
   return (r * 299 + g * 587 + b * 114) / 1000 > 165 ? '#1e2232' : '#ffffff';
 }
+
+/** `a` mixed into `b`: weight 1 gives `a`, 0 gives `b`. Both are 0xRRGGBB. */
+export function mix(a: number, b: number, weight: number): number {
+  const ch = (shift: number) => Math.round(((a >> shift) & 255) * weight + ((b >> shift) & 255) * (1 - weight));
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}

@@ -2,7 +2,7 @@
   import { Target } from '@lucide/svelte';
   import { api, type DDay } from '../lib/api';
   import { hex } from '../lib/colors';
-  import { ddayLabel, fmt, today } from '../lib/dates';
+  import { byDdayTarget, ddayLabel, ddayTarget, ddayUpcoming, fmt } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
   import { data, load, ui } from '../lib/state.svelte';
   import { imageUrl } from '../lib/images';
@@ -11,7 +11,7 @@
 
   $effect(() => {
     data.version;
-    load(api.ddays(), []).then((x) => (ddays = x.filter((d) => d.date >= today())));
+    load(api.ddays(), []).then((x) => (ddays = byDdayTarget(x.filter((d) => ddayUpcoming(d)))));
   });
 
   const next = $derived(ddays[0]);
@@ -30,13 +30,13 @@
         style:--c={hex(next.color)}
         style:background-image={next.image ? `url('${imageUrl(next.image)}')` : undefined}
       >
-        <span class="label">{ddayLabel(next.date)}</span>
+        <span class="label">{ddayLabel(next)}</span>
         <span class="name truncate">{next.title}</span>
-        <span class="faint small">{fmt(next.date, { month: 'long', day: 'numeric', weekday: 'short' })}</span>
+        <span class="faint small">{fmt(ddayTarget(next), { month: 'long', day: 'numeric', weekday: 'short' })}</span>
       </div>
       {#each rest as d (d.id)}
         <div class="rest">
-          <span class="pill" style:color={hex(d.color)} style:background="color-mix(in srgb, {hex(d.color)} 14%, transparent)">{ddayLabel(d.date)}</span>
+          <span class="pill" style:color={hex(d.color)} style:background="color-mix(in srgb, {hex(d.color)} 14%, transparent)">{ddayLabel(d)}</span>
           <span class="truncate">{d.title}</span>
         </div>
       {/each}

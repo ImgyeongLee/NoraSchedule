@@ -3,7 +3,7 @@
   import { CalendarHeart, Plus } from '@lucide/svelte';
   import { api, type DDay } from '../lib/api';
   import { hex } from '../lib/colors';
-  import { ddayLabel, diffDays, fmt, today } from '../lib/dates';
+  import { byDdayTarget, ddayDays, ddayLabel, ddayTarget, ddayUpcoming, fmt } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
   import { imageUrl } from '../lib/images';
   import { data, load, ui } from '../lib/state.svelte';
@@ -18,12 +18,13 @@
 
   // The chosen D-Day, or the next upcoming one (also when the chosen one was deleted).
   const dday = $derived(
-    ddays.find((d) => d.id === ddayId) ?? ddays.find((d) => d.date >= today()) ?? ddays[ddays.length - 1],
+    ddays.find((d) => d.id === ddayId) ?? byDdayTarget(ddays.filter((d) => ddayUpcoming(d)))[0] ?? ddays[ddays.length - 1],
   );
 
-  function relative(date: string) {
-    const n = diffDays(date, today());
+  function relative(d: DDay) {
+    const n = ddayDays(d);
     if (n === 0) return t('dd.today');
+    if (n < 0 && d.count_from_one) return t('dd.dayN', { n: -n });
     return n > 0 ? t('dd.inDays', { n }) : t('dd.daysAgo', { n: -n });
   }
 </script>
@@ -36,9 +37,9 @@
     style:background-image={dday.image ? `url('${imageUrl(dday.image)}')` : undefined}
     onclick={() => (ui.page = 'ddays')}
   >
-    <span class="label">{ddayLabel(dday.date)}</span>
+    <span class="label">{ddayLabel(dday)}</span>
     <span class="title truncate">{dday.title}</span>
-    <span class="date">{fmt(dday.date, { month: 'long', day: 'numeric', weekday: 'short' })} · {relative(dday.date)}</span>
+    <span class="date">{fmt(ddayTarget(dday), { month: 'long', day: 'numeric', weekday: 'short' })} · {relative(dday)}</span>
   </button>
 {:else}
   <div class="widget">

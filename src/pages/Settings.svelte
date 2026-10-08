@@ -2,14 +2,16 @@
   import { onMount } from 'svelte';
   import {
     AppWindow, Check, Database, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
-    Trash, TriangleAlert, Upload, X,
+    Pipette, Trash, TriangleAlert, Upload, X,
   } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
   import { api, type BackupManifest } from '../lib/api';
   import { backupError, exportBackup, pickBackup } from '../lib/backup';
   import { fmtTs } from '../lib/dates';
   import { i18n, setLocale, t, type Locale } from '../lib/i18n.svelte';
-  import { ACCENTS, setAccent, setTheme, toast, ui, type Accent, type ThemePref } from '../lib/state.svelte';
+  import { ACCENTS, setAccent, setCustomTheme, setTheme, toast, ui, type PresetAccent, type ThemePref } from '../lib/state.svelte';
+  import { fromHex, hex } from '../lib/colors';
+  import { DEFAULT_CUSTOM_THEME, TINT_LEVELS } from '../lib/customTheme';
   import {
     MAX_SAVED, applyPreset, applySaved, currentSize, loadSavedSizes, maximize, storeSavedSizes, type WindowSize,
   } from '../lib/window';
@@ -26,7 +28,7 @@
   ];
 
   /** Preview colors per theme: main accent, soft tint, second accent. */
-  const ACCENT_PREVIEW: Record<Accent, [string, string, string]> = {
+  const ACCENT_PREVIEW: Record<PresetAccent, [string, string, string]> = {
     default: ['#6c63ff', '#eeedff', '#b084f6'],
     mono: ['#1c1c1f', '#ececef', '#8a8a93'],
     pink: ['#e2558f', '#fdebf2', '#ffa98a'],
@@ -176,7 +178,49 @@
             <span class="check-mark">{#if ui.accent === accent}<Check size={14} strokeWidth={3} />{/if}</span>
           </button>
         {/each}
+        <button class="option accent" class:selected={ui.accent === 'custom'} onclick={() => setCustomTheme(ui.customTheme)}>
+          <span class="swatch" style:background="linear-gradient(140deg, {hex(ui.customTheme.primary)}, {hex(ui.customTheme.accent2)})">
+            <span class="swatch-soft custom-badge"><Pipette size={10} /></span>
+          </span>
+          <span class="name">{t('accent.custom')}</span>
+          <span class="check-mark">{#if ui.accent === 'custom'}<Check size={14} strokeWidth={3} />{/if}</span>
+        </button>
       </div>
+
+      {#if ui.accent === 'custom'}
+        <div class="custom-editor">
+          <label class="color-field">
+            <input type="color" value={hex(ui.customTheme.primary)} oninput={(e) => setCustomTheme({ ...ui.customTheme, primary: fromHex(e.currentTarget.value) })} />
+            <span>
+              <span class="s-title">{t('set.customPrimary')}</span>
+              <span class="muted small">{t('set.customPrimaryBody')}</span>
+            </span>
+          </label>
+          <label class="color-field">
+            <input type="color" value={hex(ui.customTheme.accent2)} oninput={(e) => setCustomTheme({ ...ui.customTheme, accent2: fromHex(e.currentTarget.value) })} />
+            <span>
+              <span class="s-title">{t('set.customAccent2')}</span>
+              <span class="muted small">{t('set.customAccent2Body')}</span>
+            </span>
+          </label>
+          <div class="tint-row">
+            <span class="s-title">{t('set.customTint')}</span>
+            <div class="segmented">
+              {#each TINT_LEVELS as level (level)}
+                <button class:active={ui.customTheme.tint === level} onclick={() => setCustomTheme({ ...ui.customTheme, tint: level })}>
+                  {t(`set.tint${level}`)}
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="custom-preview">
+            <button class="btn primary small" tabindex="-1">{t('set.customSample')}</button>
+            <span class="chip-soft">{t('common.today')}</span>
+            <span class="bar-sample"></span>
+            <button class="btn small ghost" onclick={() => setCustomTheme({ ...DEFAULT_CUSTOM_THEME })}>{t('set.customReset')}</button>
+          </div>
+        </div>
+      {/if}
     </section>
 
     <section class="card">
@@ -541,6 +585,86 @@
     font-size: 14px;
     flex: 1;
     min-width: 0;
+  }
+  .custom-badge {
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .custom-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+  }
+  .color-field {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+  }
+  .color-field > span {
+    display: flex;
+    flex-direction: column;
+  }
+  .color-field input[type='color'] {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 2px solid var(--surface);
+    border-radius: 12px;
+    background: none;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+  }
+  .color-field input[type='color']::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .color-field input[type='color']::-webkit-color-swatch {
+    border: none;
+    border-radius: 10px;
+  }
+  .s-title {
+    font-weight: 650;
+  }
+  .tint-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .custom-preview {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+  }
+  .chip-soft {
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-weight: 650;
+    font-size: 12.5px;
+  }
+  .bar-sample {
+    flex: 1;
+    min-width: 60px;
+    height: 8px;
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--primary), var(--accent-2));
+  }
+  .custom-preview .ghost {
+    margin-left: auto;
   }
   .sub-label {
     margin: 4px 0 8px;

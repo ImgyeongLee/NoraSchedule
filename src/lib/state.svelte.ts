@@ -2,18 +2,22 @@
 // that pages watch to reload after any change.
 import { api } from './api';
 import { fromHex } from './colors';
+import { CUSTOM_VAR_NAMES, customThemeVars, DEFAULT_CUSTOM_THEME, parseCustomTheme, type CustomTheme } from './customTheme';
 
 export type Page =
   | 'home' | 'calendar' | 'ddays' | 'todos' | 'pomodoro' | 'memos' | 'bookmarks' | 'expenses' | 'tracking' | 'analytics'
   | 'settings';
 export type ThemePref = 'light' | 'dark' | 'system';
-export type Accent = 'default' | 'mono' | 'pink' | 'blue' | 'green' | 'brown';
-export const ACCENTS: Accent[] = ['default', 'mono', 'pink', 'blue', 'green', 'brown'];
+export type Accent = 'default' | 'mono' | 'pink' | 'blue' | 'green' | 'brown' | 'custom';
+/** Built-in color themes; 'custom' is the user's own (see customTheme.ts). */
+export type PresetAccent = Exclude<Accent, 'custom'>;
+export const ACCENTS: PresetAccent[] = ['default', 'mono', 'pink', 'blue', 'green', 'brown'];
 
 export const ui = $state({
   page: 'home' as Page,
   theme: 'system' as ThemePref,
   accent: 'default' as Accent,
+  customTheme: { ...DEFAULT_CUSTOM_THEME } as CustomTheme,
   /** The user's choice; the sidebar also collapses on its own in narrow windows. */
   sidebarCollapsed: false,
   /** Date the Calendar page should open on (set by Overview tiles). */
@@ -68,6 +72,12 @@ export function applyTheme() {
   const dark = ui.theme === 'dark' || (ui.theme === 'system' && darkQuery.matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   document.documentElement.dataset.accent = ui.accent;
+  const root = document.documentElement.style;
+  if (ui.accent === 'custom') {
+    for (const [name, value] of Object.entries(customThemeVars(ui.customTheme, dark))) root.setProperty(name, value);
+  } else {
+    for (const name of CUSTOM_VAR_NAMES) root.removeProperty(name);
+  }
   // Match the native title bar (Windows) to the themed app background.
   const css = getComputedStyle(document.documentElement);
   const color = (name: string) => fromHex(css.getPropertyValue(name).trim());
@@ -82,6 +92,20 @@ export async function setAccent(accent: Accent) {
   await api.setSetting('ui.accent', accent).catch(() => {});
 }
 
+let customSaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Switches to (and updates) the user's own color theme. Saving is debounced for live color pickers. */
+export function setCustomTheme(theme: CustomTheme) {
+  ui.customTheme = theme;
+  ui.accent = 'custom';
+  applyTheme();
+  clearTimeout(customSaveTimer);
+  customSaveTimer = setTimeout(() => {
+    api.setSetting('ui.customTheme', JSON.stringify(theme)).catch(() => {});
+    api.setSetting('ui.accent', 'custom').catch(() => {});
+  }, 400);
+}
+
 export async function setTheme(theme: ThemePref) {
   ui.theme = theme;
   applyTheme();
@@ -92,7 +116,8 @@ export async function initTheme() {
   const saved = (await api.getSetting('ui.theme').catch(() => null)) ?? localStorage.getItem('nora.previewTheme');
   if (saved === 'light' || saved === 'dark' || saved === 'system') ui.theme = saved;
   const accent = (await api.getSetting('ui.accent').catch(() => null)) ?? localStorage.getItem('nora.previewAccent');
-  if (ACCENTS.includes(accent as Accent)) ui.accent = accent as Accent;
+  ui.customTheme = parseCustomTheme(await api.getSetting('ui.customTheme').catch(() => null));
+  if (accent === 'custom' || ACCENTS.includes(accent as PresetAccent)) ui.accent = accent as Accent;
   applyTheme();
   darkQuery.addEventListener('change', applyTheme);
 }

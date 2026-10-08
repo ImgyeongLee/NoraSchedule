@@ -3,7 +3,7 @@
   import { fade, fly } from 'svelte/transition';
   import {
     Activity, Bookmark, CalendarDays, ChartColumn, CircleCheck, House, ListTodo, NotebookPen, PanelLeftClose, PanelLeftOpen,
-    Pause, Play, Settings as SettingsIcon, Target, Timer, Wallet,
+    Pause, Play, Settings as SettingsIcon, Sticker, Target, Timer, Wallet,
   } from '@lucide/svelte';
   import { api, type TrackerStatus } from './lib/api';
   import { pomodoro, PHASES } from './lib/pomodoro.svelte';
@@ -17,6 +17,8 @@
   import EventHoverCard from './components/EventHoverCard.svelte';
   import { refreshTags } from './lib/tags.svelte';
   import { initReminders } from './lib/reminders';
+  import StickerLayer from './components/StickerLayer.svelte';
+  import { loadStickers, setDecorating, stickers } from './lib/stickers.svelte';
   import Home from './pages/Home.svelte';
   import Calendar from './pages/Calendar.svelte';
   import DDays from './pages/DDays.svelte';
@@ -56,6 +58,7 @@
     initSidebar();
     pomodoro.load();
     refreshTags();
+    loadStickers();
     initReminders();
     const poll = async () => (tracker = await api.trackerStatus().catch(() => null));
     poll();
@@ -222,6 +225,18 @@
 
     <button
       class="nav-item"
+      class:active={stickers.editing}
+      onclick={() => setDecorating(!stickers.editing)}
+      title={collapsed ? t('sticker.decorate') : t('sticker.decorateHint')}
+      aria-label={t('sticker.decorate')}
+      aria-pressed={stickers.editing}
+    >
+      <Sticker size={19} />
+      <span class="label-text">{t('sticker.decorate')}</span>
+    </button>
+
+    <button
+      class="nav-item"
       class:active={ui.page === 'settings'}
       onclick={() => (ui.page = 'settings')}
       title={tip(t('nav.settings'), shortcut(','))}
@@ -261,6 +276,7 @@
         {:else}<Settings />{/if}
       </div>
     {/key}
+    <StickerLayer page={ui.page} />
   </main>
 
   <ContextMenu />

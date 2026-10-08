@@ -2,15 +2,16 @@
 import type { Component } from 'svelte';
 import {
   Activity, Bookmark, CalendarCheck, CalendarDays, CalendarHeart, ChartColumn, Hand, ListTodo, NotebookPen, Target, Timer,
-  Trophy, Wallet,
+  Image as ImageIcon, Trophy, Wallet,
 } from '@lucide/svelte';
 import { api } from './api';
+import { cleanFraming, DEFAULT_FRAMING, type Framing } from './framing';
 import type { Key } from './i18n.svelte';
 
 export type TileSize = 'sm' | 'wide' | 'tall' | 'large';
 export type WidgetId =
   | 'greeting' | 'agenda' | 'calendar' | 'todos' | 'ddays' | 'dday' | 'pomodoro' | 'working' | 'weekChart' | 'progress'
-  | 'memos' | 'bookmarks' | 'expenses';
+  | 'memos' | 'bookmarks' | 'expenses' | 'image';
 
 export interface Tile {
   /** Unique per tile, so the same widget can appear more than once. */
@@ -19,6 +20,9 @@ export interface Tile {
   size: TileSize;
   /** "D-Day card" tiles: which D-Day to show (null = the next upcoming one). */
   ddayId?: number | null;
+  /** Image cards: the picture and how it is framed. */
+  image?: string | null;
+  framing?: Framing;
 }
 
 type IconComponent = Component<{ size?: number }>;
@@ -37,6 +41,7 @@ export const WIDGETS: Record<WidgetId, { name: Key; desc: Key; icon: IconCompone
   memos: { name: 'w.memos', desc: 'w.memos.desc', icon: NotebookPen, defaultSize: 'sm' },
   bookmarks: { name: 'w.bookmarks', desc: 'w.bookmarks.desc', icon: Bookmark, defaultSize: 'tall' },
   expenses: { name: 'w.expenses', desc: 'w.expenses.desc', icon: Wallet, defaultSize: 'sm' },
+  image: { name: 'w.image', desc: 'w.image.desc', icon: ImageIcon, defaultSize: 'sm', multiple: true },
 };
 
 export const SIZES: { id: TileSize; label: Key }[] = [
@@ -64,7 +69,22 @@ const DEFAULT_LAYOUT: Omit<Tile, 'uid'>[] = [
 
 const SETTING = 'home.layout';
 
-export const home = $state({ tiles: [] as Tile[], loaded: false });
+export type HeaderHeight = 'sm' | 'md' | 'lg';
+export const HEADER_HEIGHTS: Record<HeaderHeight, number> = { sm: 140, md: 200, lg: 280 };
+
+export interface HomeHeader {
+  image: string | null;
+  framing: Framing;
+  height: HeaderHeight;
+}
+
+const HEADER_SETTING = 'home.header';
+
+export const home = $state({
+  tiles: [] as Tile[],
+  loaded: false,
+  header: { image: null, framing: { ...DEFAULT_FRAMING }, height: 'md' } as HomeHeader,
+});
 
 export async function loadLayout() {
   const saved = await api.getSetting(SETTING).catch(() => null);
@@ -80,15 +100,49 @@ export async function loadLayout() {
   // Layouts saved by older versions have no uid.
   home.tiles = tiles.map((t) => ({ uid: (t as Tile).uid ?? newUid(), ...t }));
   home.loaded = true;
+  await loadHeader();
+}
+
+async function loadHeader() {
+  try {
+    const saved = JSON.parse((await api.getSetting(HEADER_SETTING).catch(() => null)) ?? 'null');
+    if (saved && typeof saved === 'object') {
+      home.header = {
+        image: typeof saved.image === 'string' ? saved.image : null,
+        framing: cleanFraming(saved.framing),
+        height: saved.height in HEADER_HEIGHTS ? saved.height : 'md',
+      };
+    }
+  } catch {
+    // Corrupt setting: no header.
+  }
+}
+
+/** Saves the header; an image that is no longer used is cleaned up afterwards. */
+export async function setHeader(header: HomeHeader) {
+  home.header = header;
+  await api.setSetting(HEADER_SETTING, JSON.stringify(header)).catch(() => {});
+  api.removeUnusedImages().catch(() => {});
 }
 
 export function saveLayout() {
-  api.setSetting(SETTING, JSON.stringify(home.tiles)).catch(() => {});
+  return api.setSetting(SETTING, JSON.stringify(home.tiles)).catch(() => {});
 }
 
-export function resetLayout() {
+/** Image cards: sets the picture and its framing (by tile uid). */
+export async function setTileImage(uid: string, image: string | null, framing: Framing) {
+  const tile = home.tiles.find((t) => t.uid === uid);
+  if (!tile) return;
+  tile.image = image;
+  tile.framing = framing;
+  await saveLayout();
+  api.removeUnusedImages().catch(() => {});
+}
+
+export async function resetLayout() {
   home.tiles = DEFAULT_LAYOUT.map((t) => ({ uid: newUid(), ...t }));
-  saveLayout();
+  await saveLayout();
+  api.removeUnusedImages().catch(() => {});
 }
 
 export function addTile(id: WidgetId, ddayId: number | null = null) {
@@ -101,9 +155,10 @@ export function setTileDday(index: number, ddayId: number | null) {
   saveLayout();
 }
 
-export function removeTile(index: number) {
-  home.tiles.splice(index, 1);
-  saveLayout();
+export async function removeTile(index: number) {
+  const [removed] = home.tiles.splice(index, 1);
+  await saveLayout();
+  if (removed?.image) api.removeUnusedImages().catch(() => {});
 }
 
 export function moveTile(from: number, to: number) {

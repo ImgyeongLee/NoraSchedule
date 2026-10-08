@@ -134,17 +134,24 @@ pub fn delete_dday(state: State<AppState>, id: i64) -> CmdResult<()> {
 }
 
 /// Optimizes an uploaded image (sent as raw bytes) and stores it. Returns the file name.
-/// The file is kept only once a D-Day references it; see `remove_unused_images`.
+/// The `purpose` header (`cover`, `header` or `sticker`) sets the size and format.
+/// The file is kept only once something references it; see `remove_unused_images`.
 #[tauri::command]
 pub async fn import_image(state: State<'_, AppState>, request: Request<'_>) -> CmdResult<String> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("expected raw image bytes".into());
     };
     let bytes = bytes.clone();
+    let purpose = request
+        .headers()
+        .get("purpose")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| serde_json::from_value(serde_json::Value::String(v.to_owned())).ok())
+        .unwrap_or_default();
     let dir = state.images_dir.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let jpeg = crate::images::optimize(&bytes).map_err(|e| e.to_string())?;
-        crate::images::store(&dir, &jpeg).map_err(|e| e.to_string())
+        let (file, ext) = crate::images::optimize(&bytes, purpose).map_err(|e| e.to_string())?;
+        crate::images::store(&dir, &file, ext).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

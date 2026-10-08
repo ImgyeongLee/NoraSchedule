@@ -111,11 +111,48 @@ export function fmtHours(secs: number): string {
   return t('dur.h', { h: h >= 10 ? h.toFixed(0) : h.toFixed(1) });
 }
 
-export function ddayLabel(date: DateStr, from: DateStr = today()): string {
-  const n = diffDays(date, from);
+type DDayLike = { date: DateStr; yearly: boolean; count_from_one: boolean };
+
+/** The `year`'s anniversary of `date` (Feb 29 falls on Feb 28 in other years). */
+function anniversary(date: DateStr, year: number): DateStr {
+  const [, m, d] = date.split('-').map(Number);
+  const last = new Date(year, m, 0).getDate();
+  return `${year}-${pad(m)}-${pad(Math.min(d, last))}`;
+}
+
+/** The day a D-Day counts toward: its date, or for yearly ones the next anniversary from `from` on. */
+export function ddayTarget(d: DDayLike, from: DateStr = today()): DateStr {
+  if (!d.yearly || d.date >= from) return d.date;
+  const year = Number(from.slice(0, 4));
+  const thisYear = anniversary(d.date, year);
+  return thisYear >= from ? thisYear : anniversary(d.date, year + 1);
+}
+
+/** Whether the D-Day falls on `day` (every anniversary, for yearly ones). */
+export function ddayOn(d: DDayLike, day: DateStr): boolean {
+  if (d.date === day) return true;
+  return d.yearly && day > d.date && anniversary(d.date, Number(day.slice(0, 4))) === day;
+}
+
+/** Days until the D-Day (positive), or since it (negative). Counting from one adds the start day. */
+export function ddayDays(d: DDayLike, from: DateStr = today()): number {
+  const n = diffDays(ddayTarget(d, from), from);
+  return n <= 0 && d.count_from_one && !d.yearly ? n - 1 : n;
+}
+
+/** "D-12", "D-Day" or "D+30". */
+export function ddayLabel(d: DDayLike, from: DateStr = today()): string {
+  const n = ddayDays(d, from);
   if (n === 0) return 'D-Day';
   return n > 0 ? `D-${n}` : `D+${-n}`;
 }
+
+/** Whether the D-Day is still ahead (yearly ones always are). */
+export const ddayUpcoming = (d: DDayLike, from: DateStr = today()) => ddayTarget(d, from) >= from;
+
+/** D-Days sorted by the day they count toward. */
+export const byDdayTarget = <T extends DDayLike>(list: T[], from: DateStr = today()): T[] =>
+  [...list].sort((a, b) => ddayTarget(a, from).localeCompare(ddayTarget(b, from)));
 
 /** Assigns overlapping time spans (sorted by start) to side-by-side columns. */
 export function overlapColumns(spans: [number, number][]): { col: number; cols: number }[] {

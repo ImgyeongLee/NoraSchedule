@@ -3,7 +3,7 @@
   import EventModal from '../pages/EventModal.svelte';
   import { api, type CalEvent, type DDay } from '../lib/api';
   import { DEFAULT_COLOR, hex, textOn } from '../lib/colors';
-  import { addMinutes, covers, isAllDayLane, pad, timeOf, toDateTime, today } from '../lib/dates';
+  import { addMinutes, covers, ddayOn, isAllDayLane, pad, timeOf, toDateTime, today } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
   import { data, load, openCalendar } from '../lib/state.svelte';
   import { eventMenu, pasteAsEvent, pasteOnHover } from '../lib/clipboard.svelte';
@@ -18,7 +18,7 @@
     data.version;
     const d = today();
     load(api.eventsBetween(d, d), []).then((e) => (events = e.filter((x) => covers(x, d))));
-    load(api.ddays(), []).then((x) => (ddays = x.filter((y) => y.date === d)));
+    load(api.ddays(), []).then((x) => (ddays = x.filter((y) => ddayOn(y, d))));
   });
 
   function addEvent() {

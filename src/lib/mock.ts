@@ -69,9 +69,9 @@ export function installMock() {
     { id: 3, name: 'Health', color: 0x34c38f, category: 'Personal' },
   ];
   const ddays: DDay[] = [
-    { id: 1, title: 'Final exam', date: addDays(t, 12), color: 0xf2668b, image: null },
-    { id: 2, title: 'Trip to Jeju', date: addDays(t, 40), color: 0x4aa8ff, image: null },
-    { id: 3, title: 'Started new job', date: addDays(t, -100), color: 0x34c38f, image: null },
+    { id: 1, title: 'Final exam', date: addDays(t, 12), color: 0xf2668b, image: null, yearly: false, count_from_one: false },
+    { id: 2, title: 'Trip to Jeju', date: addDays(t, 40), color: 0x4aa8ff, image: null, yearly: false, count_from_one: false },
+    { id: 3, title: 'Started new job', date: addDays(t, -100), color: 0x34c38f, image: null, yearly: false, count_from_one: false },
   ];
   const groups: TodoGroup[] = [
     { id: 1, name: 'Work', color: 0x7c74ff },

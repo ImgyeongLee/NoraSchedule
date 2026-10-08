@@ -1,7 +1,7 @@
-// D-Day cover images. Rust does the optimizing and storage (src-tauri/src/images.rs);
+// User images (D-Day covers, Overview header and cards, stickers). Rust does the optimizing and storage (src-tauri/src/images.rs);
 // this file handles picking files and building URLs for stored images.
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { api } from './api';
+import { api, type ImagePurpose } from './api';
 import { t } from './i18n.svelte';
 
 /** Dev browser preview keeps imported images as blob URLs (see lib/mock.ts). */
@@ -25,13 +25,13 @@ async function reencodeInWebview(file: File): Promise<Uint8Array> {
 }
 
 /** Imports a picked/dropped file and returns the stored file name. Throws a translated message. */
-export async function importImageFile(file: File): Promise<string> {
+export async function importImageFile(file: File, purpose: ImagePurpose = 'cover'): Promise<string> {
   try {
     try {
-      return await api.importImage(new Uint8Array(await file.arrayBuffer()));
+      return await api.importImage(new Uint8Array(await file.arrayBuffer()), purpose);
     } catch (e) {
       if (String(e) !== 'image_unsupported') throw e;
-      return await api.importImage(await reencodeInWebview(file));
+      return await api.importImage(await reencodeInWebview(file), purpose);
     }
   } catch (e) {
     const code = String(e);

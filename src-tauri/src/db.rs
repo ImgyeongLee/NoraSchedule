@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS ddays (
     title TEXT    NOT NULL,
     date  TEXT    NOT NULL,
     color INTEGER NOT NULL,
-    image TEXT
+    image TEXT,
+    yearly INTEGER NOT NULL DEFAULT 0,
+    count_from_one INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS todo_groups (
@@ -239,6 +241,12 @@ pub struct DDay {
     pub color: u32,
     /// File name of the cover image in the images folder, if any.
     pub image: Option<String>,
+    /// Counts toward the same month and day every year (birthdays, anniversaries).
+    #[serde(default)]
+    pub yearly: bool,
+    /// For past dates, count the date itself as day 1 (D+1) instead of day 0.
+    #[serde(default)]
+    pub count_from_one: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -361,6 +369,20 @@ pub struct Db {
     pub(crate) conn: Connection,
 }
 
+/// Settings whose JSON values reference stored images (see `referenced_images`).
+const IMAGE_SETTINGS: [&str; 3] = ["home.header", "home.layout", "stickers"];
+
+fn collect_strings(value: &serde_json::Value, out: &mut std::collections::HashSet<String>) {
+    match value {
+        serde_json::Value::String(s) => {
+            out.insert(s.clone());
+        }
+        serde_json::Value::Array(items) => items.iter().for_each(|v| collect_strings(v, out)),
+        serde_json::Value::Object(map) => map.values().for_each(|v| collect_strings(v, out)),
+        _ => {}
+    }
+}
+
 /// Brings databases created by older versions up to the current schema.
 fn migrate(conn: &Connection) -> DbResult<()> {
     let has_due_time = conn
@@ -383,6 +405,15 @@ fn migrate(conn: &Connection) -> DbResult<()> {
         .exists([])?;
     if !has_image {
         conn.execute_batch("ALTER TABLE ddays ADD COLUMN image TEXT")?;
+    }
+    let has_yearly = conn
+        .prepare("SELECT 1 FROM pragma_table_info('ddays') WHERE name = 'yearly'")?
+        .exists([])?;
+    if !has_yearly {
+        conn.execute_batch(
+            "ALTER TABLE ddays ADD COLUMN yearly INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE ddays ADD COLUMN count_from_one INTEGER NOT NULL DEFAULT 0;",
+        )?;
     }
     let has_cancelled = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'cancelled'")?
@@ -624,9 +655,19 @@ impl Db {
     // ---- d-days -----------------------------------------------------------
 
     pub fn ddays(&self) -> DbResult<Vec<DDay>> {
-        let mut st = self.conn.prepare("SELECT id, title, date, color, image FROM ddays ORDER BY date")?;
+        let mut st = self
+            .conn
+            .prepare("SELECT id, title, date, color, image, yearly, count_from_one FROM ddays ORDER BY date")?;
         st.query_map([], |r| {
-            Ok(DDay { id: r.get(0)?, title: r.get(1)?, date: parse_d(r.get(2)?), color: r.get(3)?, image: r.get(4)? })
+            Ok(DDay {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                date: parse_d(r.get(2)?),
+                color: r.get(3)?,
+                image: r.get(4)?,
+                yearly: r.get(5)?,
+                count_from_one: r.get(6)?,
+            })
         })?
         .collect()
     }
@@ -635,13 +676,13 @@ impl Db {
         let date = d.date.format(D_FMT).to_string();
         if d.id == 0 {
             self.conn.execute(
-                "INSERT INTO ddays(title, date, color, image) VALUES(?1, ?2, ?3, ?4)",
-                params![d.title, date, d.color, d.image],
+                "INSERT INTO ddays(title, date, color, image, yearly, count_from_one) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+                params![d.title, date, d.color, d.image, d.yearly, d.count_from_one],
             )?;
         } else {
             self.conn.execute(
-                "UPDATE ddays SET title=?1, date=?2, color=?3, image=?4 WHERE id=?5",
-                params![d.title, date, d.color, d.image, d.id],
+                "UPDATE ddays SET title=?1, date=?2, color=?3, image=?4, yearly=?5, count_from_one=?6 WHERE id=?7",
+                params![d.title, date, d.color, d.image, d.yearly, d.count_from_one, d.id],
             )?;
         }
         Ok(())
@@ -650,7 +691,14 @@ impl Db {
     /// Image files still referenced by some D-Day.
     pub fn referenced_images(&self) -> DbResult<std::collections::HashSet<String>> {
         let mut st = self.conn.prepare("SELECT image FROM ddays WHERE image IS NOT NULL")?;
-        st.query_map([], |r| r.get(0))?.collect()
+        let mut names: std::collections::HashSet<String> = st.query_map([], |r| r.get(0))?.collect::<DbResult<_>>()?;
+        // The Overview header, image cards and stickers live in JSON settings; keep every image they mention.
+        for key in IMAGE_SETTINGS {
+            if let Some(json) = self.setting(key)? {
+                collect_strings(&serde_json::from_str(&json).unwrap_or_default(), &mut names);
+            }
+        }
+        Ok(names)
     }
 
     pub fn delete_dday(&self, id: i64) -> DbResult<()> {
@@ -971,6 +1019,21 @@ pub(crate) mod tests {
         let todos = db.todos().unwrap();
         assert_eq!(todos[0].title, "old");
         assert_eq!(todos[0].due_time, None);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn header_card_and_sticker_images_are_kept_by_cleanup() {
+        let (db, path) = temp_db();
+        db.set_setting("home.header", r#"{"image":"a-1.jpg","framing":{"x":0.5,"y":0.5,"zoom":1},"height":"md"}"#).unwrap();
+        db.set_setting("home.layout", r#"[{"uid":"u","id":"image","size":"sm","image":"b-2.jpg"}]"#).unwrap();
+        db.set_setting("stickers", r#"{"library":["c-3.png"],"placed":[{"id":"s","image":"c-3.png","page":"home"}]}"#).unwrap();
+        db.set_setting("ui.unrelated", r#""d-4.jpg""#).unwrap();
+        let keep = db.referenced_images().unwrap();
+        for name in ["a-1.jpg", "b-2.jpg", "c-3.png"] {
+            assert!(keep.contains(name), "{name} must survive cleanup");
+        }
+        assert!(!keep.contains("d-4.jpg"), "only image settings are scanned");
         let _ = std::fs::remove_file(path);
     }
 
