@@ -10,7 +10,7 @@
   import { initSidebar, initTheme, setSidebarCollapsed, toast, ui, type Page } from './lib/state.svelte';
   import { initLocale, t, type Key } from './lib/i18n.svelte';
   import { trackState } from './lib/tracker';
-  import { clipboard, pageTarget, pointer } from './lib/clipboard.svelte';
+  import { clipboard, isMac, pageTarget, pointer, shortcut } from './lib/clipboard.svelte';
   import ContextMenu from './components/ContextMenu.svelte';
   import { isSecondaryClick } from './lib/menu.svelte';
   import ScopeDialog from './components/ScopeDialog.svelte';
@@ -152,7 +152,7 @@
   bind:innerWidth={windowWidth}
 />
 
-<div class="app" class:collapsed>
+<div class="app" class:collapsed class:mac={isMac}>
   <aside class="sidebar">
     <div class="drag" data-tauri-drag-region></div>
     <div class="brand">
@@ -171,7 +171,7 @@
           class="nav-item"
           class:active={ui.page === item.id}
           onclick={() => (ui.page = item.id)}
-          title={tip(t(item.label), i < 10 ? `⌘${(i + 1) % 10}` : '')}
+          title={tip(t(item.label), i < 10 ? shortcut(String((i + 1) % 10)) : '')}
           aria-label={t(item.label)}
         >
           <item.icon size={19} />
@@ -219,7 +219,7 @@
       class="nav-item"
       class:active={ui.page === 'settings'}
       onclick={() => (ui.page = 'settings')}
-      title={tip(t('nav.settings'), '⌘,')}
+      title={tip(t('nav.settings'), shortcut(','))}
       aria-label={t('nav.settings')}
     >
       <SettingsIcon size={19} />
@@ -230,7 +230,7 @@
       <button
         class="nav-item collapse-btn"
         onclick={() => setSidebarCollapsed(!ui.sidebarCollapsed)}
-        title={tip(collapsed ? t('nav.expand') : t('nav.collapse'), '⌘\\')}
+        title={tip(collapsed ? t('nav.expand') : t('nav.collapse'), shortcut('\\'))}
         aria-label={collapsed ? t('nav.expand') : t('nav.collapse')}
       >
         {#if collapsed}<PanelLeftOpen size={19} />{:else}<PanelLeftClose size={19} />{/if}
@@ -294,12 +294,16 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    padding: 44px 14px 14px;
+    padding: 20px 14px 14px;
     background: var(--sidebar);
     border-right: 1px solid var(--border);
     min-height: 0;
     min-width: 0;
     overflow: hidden;
+  }
+  /* macOS draws its window buttons over the top of the sidebar. */
+  .mac .sidebar {
+    padding-top: 44px;
   }
   .drag {
     position: absolute;

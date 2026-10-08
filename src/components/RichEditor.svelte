@@ -13,6 +13,7 @@
     SquareCode, Strikethrough, Underline, Undo2, Unlink,
   } from '@lucide/svelte';
   import { t, type Key } from '../lib/i18n.svelte';
+  import { isMac } from '../lib/clipboard.svelte';
 
   let { value, onchange }: { value: string; onchange: (markdown: string) => void } = $props();
 
@@ -151,7 +152,7 @@
   {/if}
 
   <div class="surface" bind:this={element}></div>
-  <p class="hint faint small">{t('rt.openLinkHint')}</p>
+  <p class="hint faint small">{t('rt.openLinkHint', { key: isMac ? '⌘' : 'Ctrl' })}</p>
 </div>
 
 <style>
