@@ -45,6 +45,8 @@ impl Purpose {
 pub const JPEG_QUALITY: u8 = 82;
 /// Refuse absurdly large uploads before decoding them.
 pub const MAX_UPLOAD_BYTES: usize = 40 * 1024 * 1024;
+/// Animated GIF stickers are kept unchanged, so they get a tighter limit.
+pub const MAX_GIF_STICKER_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug)]
 pub enum ImageError {
@@ -75,6 +77,15 @@ impl From<std::io::Error> for ImageError {
 pub fn optimize(bytes: &[u8], purpose: Purpose) -> Result<(Vec<u8>, &'static str), ImageError> {
     if bytes.len() > MAX_UPLOAD_BYTES {
         return Err(ImageError::TooLarge);
+    }
+    // Re-encoding would keep only the first frame, so GIF stickers are stored as they are
+    // (after checking they really are GIFs) and keep their animation.
+    if purpose == Purpose::Sticker && image::guess_format(bytes).ok() == Some(image::ImageFormat::Gif) {
+        if bytes.len() > MAX_GIF_STICKER_BYTES {
+            return Err(ImageError::TooLarge);
+        }
+        image::load_from_memory_with_format(bytes, image::ImageFormat::Gif).map_err(|_| ImageError::Unsupported)?;
+        return Ok((bytes.to_vec(), "gif"));
     }
     let reader = ImageReader::new(Cursor::new(bytes)).with_guessed_format()?;
     let mut decoder = reader.into_decoder().map_err(|_| ImageError::Unsupported)?;
@@ -123,9 +134,20 @@ fn flatten_on_white(img: DynamicImage) -> RgbImage {
 /// Only names this module generates are ever read or deleted.
 pub fn is_safe_name(name: &str) -> bool {
     name.len() <= 64
-        && (name.ends_with(".jpg") || name.ends_with(".png"))
+        && [".jpg", ".png", ".gif"].iter().any(|ext| name.ends_with(ext))
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
         && !name.contains("..")
+}
+
+/// MIME type for a stored image name.
+pub fn content_type(name: &str) -> &'static str {
+    if name.ends_with(".png") {
+        "image/png"
+    } else if name.ends_with(".gif") {
+        "image/gif"
+    } else {
+        "image/jpeg"
+    }
 }
 
 /// Writes the optimized image and returns its new file name.
@@ -203,6 +225,32 @@ mod tests {
         assert_eq!(optimize(&png(40, 30, 255), Purpose::Sticker).unwrap().1, "jpg");
     }
 
+    fn gif(frames: u32) -> Vec<u8> {
+        use image::codecs::gif::GifEncoder;
+        use image::{Delay, Frame};
+        let mut out = Vec::new();
+        {
+            let mut encoder = GifEncoder::new(&mut out);
+            for i in 0..frames {
+                let img = RgbaImage::from_pixel(20, 10, Rgba([(i * 80) as u8, 0, 0, 255]));
+                encoder.encode_frame(Frame::from_parts(img, 0, 0, Delay::from_numer_denom_ms(100, 1))).unwrap();
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn gif_stickers_are_kept_as_is_so_they_stay_animated() {
+        let input = gif(3);
+        let (output, ext) = optimize(&input, Purpose::Sticker).unwrap();
+        assert_eq!(ext, "gif");
+        assert_eq!(output, input);
+        // Covers still get a still JPEG.
+        assert_eq!(optimize(&input, Purpose::Cover).unwrap().1, "jpg");
+        // Something that only claims to be a GIF is refused.
+        assert!(matches!(optimize(b"GIF89a broken", Purpose::Sticker), Err(ImageError::Unsupported)));
+    }
+
     #[test]
     fn garbage_collection_keeps_referenced_files_only() {
         let dir = std::env::temp_dir().join(format!("nora_img_test_{}", std::process::id()));
@@ -223,6 +271,7 @@ mod tests {
         assert!(!is_safe_name("../nora.sqlite3"));
         assert!(!is_safe_name("a/b.jpg"));
         assert!(is_safe_name("18f3a-2.png"));
-        assert!(!is_safe_name("x.gif"));
+        assert!(is_safe_name("18f3a-3.gif"));
+        assert!(!is_safe_name("x.bmp"));
     }
 }

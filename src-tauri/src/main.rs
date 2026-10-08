@@ -35,7 +35,7 @@ fn serve_image(app: &tauri::AppHandle, request: tauri::http::Request<Vec<u8>>) -
     let builder = tauri::http::Response::builder();
     match file {
         Some(bytes) => builder
-            .header("Content-Type", if name.ends_with(".png") { "image/png" } else { "image/jpeg" })
+            .header("Content-Type", images::content_type(name))
             .header("Cache-Control", "max-age=31536000, immutable")
             .body(bytes),
         None => builder.status(404).body(Vec::new()),
