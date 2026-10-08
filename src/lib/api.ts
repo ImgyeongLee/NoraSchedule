@@ -21,7 +21,7 @@ export interface Repeat {
 
 /** For repeating events: change only this occurrence, or the whole series. */
 /** What an uploaded image is for (see `Purpose` in src-tauri/src/images.rs). */
-export type ImagePurpose = 'cover' | 'header' | 'sticker';
+export type ImagePurpose = 'cover' | 'card' | 'header' | 'sticker';
 
 export type Scope = 'one' | 'all';
 

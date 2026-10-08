@@ -35,6 +35,7 @@
     width={w}
     height={h}
     longSide={1600}
+    purpose="card"
     onsave={(image, f) => setTileImage(uid, image, f)}
     onremove={() => setTileImage(uid, null, framing)}
     onclose={() => (editing = false)}

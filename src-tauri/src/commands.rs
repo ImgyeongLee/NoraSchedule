@@ -134,7 +134,7 @@ pub fn delete_dday(state: State<AppState>, id: i64) -> CmdResult<()> {
 }
 
 /// Optimizes an uploaded image (sent as raw bytes) and stores it. Returns the file name.
-/// The `purpose` header (`cover`, `header` or `sticker`) sets the size and format.
+/// The `purpose` header (`cover`, `card`, `header` or `sticker`) sets the size and format.
 /// The file is kept only once something references it; see `remove_unused_images`.
 #[tauri::command]
 pub async fn import_image(state: State<'_, AppState>, request: Request<'_>) -> CmdResult<String> {
