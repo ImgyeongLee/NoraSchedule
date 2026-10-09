@@ -2,9 +2,12 @@
   import { onMount } from 'svelte';
   import {
     AppWindow, ArrowDown, ArrowUp, Check, Database, GripVertical, PanelsTopLeft, RotateCcw, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
-    CalendarDays, Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
+    CalendarDays, PanelRight, Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
   } from '@lucide/svelte';
   import { calPrefs, setCalPrefs } from '../lib/calPrefs.svelte';
+  import { loadPanelWidgets, PANEL_WIDGETS, panelApi, savePanelWidgets, type Corner, type PanelStatus } from '../lib/panel';
+  import { WIDGETS, type WidgetId } from '../lib/home.svelte';
+  import { broadcastPrefs } from '../lib/sync.svelte';
   import Modal from '../components/Modal.svelte';
   import { api, type BackupManifest } from '../lib/api';
   import { backupError, exportBackup, pickBackup } from '../lib/backup';
@@ -41,6 +44,42 @@
     green: ['#1f9d68', '#e3f5ec', '#9bd35a'],
     brown: ['#a8691f', '#faefd9', '#f2b933'],
   };
+
+  // ---- overlay panel (Windows desktop only)
+  const inTauri = '__TAURI_INTERNALS__' in window;
+  let panel = $state<PanelStatus | null>(null);
+  let panelWidgets = $state<WidgetId[]>([]);
+  const CORNERS: { id: Corner; label: () => string }[] = [
+    { id: 'top-left', label: () => t('panel.topLeft') },
+    { id: 'top-right', label: () => t('panel.topRight') },
+    { id: 'bottom-left', label: () => t('panel.bottomLeft') },
+    { id: 'bottom-right', label: () => t('panel.bottomRight') },
+  ];
+
+  async function refreshPanel() {
+    panel = await panelApi.status().catch(() => null);
+  }
+
+  async function panelAction(work: Promise<unknown>) {
+    try {
+      await work;
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+    await refreshPanel();
+  }
+
+  async function togglePanelWidget(id: WidgetId, on: boolean) {
+    panelWidgets = on ? [...panelWidgets, id] : panelWidgets.filter((x) => x !== id);
+    await savePanelWidgets(panelWidgets).catch(() => {});
+    broadcastPrefs();
+  }
+
+  onMount(() => {
+    if (!inTauri) return;
+    refreshPanel();
+    loadPanelWidgets().then((w) => (panelWidgets = w));
+  });
 
   const PRESETS = [0.6, 0.7, 0.8, 0.9];
   let saved = $state<WindowSize[]>([]);
@@ -263,6 +302,64 @@
         </div>
       </div>
     </section>
+
+    {#if panel}
+      <section class="card">
+        <div class="section-head">
+          <div class="icon"><PanelRight size={18} /></div>
+          <div>
+            <h2>{t('panel.title')}</h2>
+            <p class="muted small">{t('panel.body')}</p>
+          </div>
+        </div>
+        <label class="cal-opt">
+          <span>
+            <span class="cal-opt-title">{t('panel.show')}</span>
+            <span class="muted small">{t('panel.showBody')}</span>
+          </span>
+          <input type="checkbox" class="switch" checked={panel.open} onchange={(e) => panelAction(panelApi.setEnabled(e.currentTarget.checked))} />
+        </label>
+        <div class="cal-opt">
+          <span>
+            <span class="cal-opt-title">{t('panel.position')}</span>
+            <span class="muted small">{t('panel.positionBody')}</span>
+          </span>
+          <div class="segmented">
+            {#each CORNERS as c (c.id)}
+              <button disabled={!panel.open} onclick={() => panelAction(panelApi.place(c.id))}>{c.label()}</button>
+            {/each}
+          </div>
+        </div>
+        <label class="cal-opt">
+          <span>
+            <span class="cal-opt-title">{t('panel.onTop')}</span>
+            <span class="muted small">{t('panel.onTopBody')}</span>
+          </span>
+          <input type="checkbox" class="switch" checked={panel.on_top} onchange={(e) => panelAction(panelApi.setOnTop(e.currentTarget.checked))} />
+        </label>
+        <label class="cal-opt">
+          <span>
+            <span class="cal-opt-title">{t('panel.autostart')}</span>
+            <span class="muted small">{t('panel.autostartBody')}</span>
+          </span>
+          <input type="checkbox" class="switch" checked={panel.autostart} onchange={(e) => panelAction(panelApi.setAutostart(e.currentTarget.checked))} />
+        </label>
+        <div class="cal-opt panel-widgets">
+          <span>
+            <span class="cal-opt-title">{t('panel.widgets')}</span>
+            <span class="muted small">{t('panel.widgetsBody')}</span>
+          </span>
+          <div class="widget-picks">
+            {#each PANEL_WIDGETS as id (id)}
+              <label class="widget-pick">
+                <input type="checkbox" checked={panelWidgets.includes(id)} onchange={(e) => togglePanelWidget(id, e.currentTarget.checked)} />
+                {t(WIDGETS[id].name)}
+              </label>
+            {/each}
+          </div>
+        </div>
+      </section>
+    {/if}
 
     <section class="card">
       <div class="section-head">
@@ -680,6 +777,22 @@
     flex-direction: column;
     min-width: 0;
     flex: 1 1 260px;
+  }
+  .panel-widgets {
+    cursor: default;
+  }
+  .widget-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    flex: 1 1 100%;
+  }
+  .widget-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    cursor: pointer;
   }
   .cal-opt-title {
     font-weight: 650;

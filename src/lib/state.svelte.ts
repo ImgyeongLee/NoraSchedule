@@ -2,6 +2,7 @@
 // that pages watch to reload after any change.
 import { api } from './api';
 import { fromHex } from './colors';
+import { broadcastPrefs } from './sync.svelte';
 import { CUSTOM_VAR_NAMES, customThemeVars, DEFAULT_CUSTOM_THEME, parseCustomTheme, type CustomTheme } from './customTheme';
 
 export type Page =
@@ -90,6 +91,7 @@ export async function setAccent(accent: Accent) {
   ui.accent = accent;
   applyTheme();
   await api.setSetting('ui.accent', accent).catch(() => {});
+  broadcastPrefs();
 }
 
 let customSaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -100,9 +102,12 @@ export function setCustomTheme(theme: CustomTheme) {
   ui.accent = 'custom';
   applyTheme();
   clearTimeout(customSaveTimer);
-  customSaveTimer = setTimeout(() => {
-    api.setSetting('ui.customTheme', JSON.stringify(theme)).catch(() => {});
-    api.setSetting('ui.accent', 'custom').catch(() => {});
+  customSaveTimer = setTimeout(async () => {
+    await Promise.all([
+      api.setSetting('ui.customTheme', JSON.stringify(theme)).catch(() => {}),
+      api.setSetting('ui.accent', 'custom').catch(() => {}),
+    ]);
+    broadcastPrefs();
   }, 400);
 }
 
@@ -110,6 +115,7 @@ export async function setTheme(theme: ThemePref) {
   ui.theme = theme;
   applyTheme();
   await api.setSetting('ui.theme', theme).catch(() => {});
+  broadcastPrefs();
 }
 
 export async function initTheme() {

@@ -2,6 +2,7 @@
 // when the language changes in Settings.
 import { api } from './api';
 import { ja } from './i18n.ja';
+import { broadcastPrefs } from './sync.svelte';
 
 export type Locale = 'en' | 'ko' | 'ja';
 
@@ -482,6 +483,28 @@ const en = {
   'set.timePickerBody': 'A list every 15 minutes, or AM/PM with any hour (1–12) and minute (0–59).',
   'set.timePickerList': '15-minute list',
   'set.timePickerPrecise': 'Hour & minute',
+  'panel.title': 'Overlay panel',
+  'panel.body': 'A small panel with a few widgets that stays on your desktop, without a taskbar button.',
+  'panel.show': 'Show the panel',
+  'panel.showBody': 'It also opens whenever Nora starts, and is turned off only here. Drag its top bar to move it; drag an edge to resize.',
+  'panel.position': 'Snap to a corner',
+  'panel.positionBody': 'The panel remembers where you leave it.',
+  'panel.topLeft': 'Top left',
+  'panel.topRight': 'Top right',
+  'panel.bottomLeft': 'Bottom left',
+  'panel.bottomRight': 'Bottom right',
+  'panel.onTop': 'Keep above other windows',
+  'panel.onTopBody': 'You can also toggle this with the pin on the panel.',
+  'panel.autostart': 'Start when I sign in to Windows',
+  'panel.autostartBody': 'Opens just the panel; the full app opens from its window button.',
+  'panel.widgets': 'Widgets in the panel',
+  'panel.widgetsBody': 'Pomodoro and image cards stay on the Overview.',
+  'panel.pin': 'Keep above other windows',
+  'panel.unpin': 'Stop keeping above other windows',
+  'panel.openApp': 'Open Nora',
+  'panel.collapse': 'Fold up the panel',
+  'panel.expand': 'Unfold the panel',
+  'panel.empty': 'Choose widgets in Settings → Overlay panel.',
   'menu.edit': 'Edit',
   'menu.copy': 'Copy',
   'menu.paste': 'Paste',
@@ -1401,6 +1424,28 @@ const ko: Record<Key, string> = {
   'set.timePickerBody': '15분 단위 목록, 또는 오전/오후와 1~12시, 0~59분을 직접 고를 수 있어요.',
   'set.timePickerList': '15분 단위',
   'set.timePickerPrecise': '시·분 직접 선택',
+  'panel.title': '오버레이 패널',
+  'panel.body': '작업 표시줄에 뜨지 않고 바탕화면에 떠 있는 작은 위젯 패널이에요.',
+  'panel.show': '패널 표시',
+  'panel.showBody': '켜 두면 Nora를 실행할 때마다 함께 열리고, 끌 때는 여기에서만 끌 수 있어요. 위쪽 막대를 끌어 옮기고, 가장자리를 끌어 크기를 바꿔요.',
+  'panel.position': '구석으로 보내기',
+  'panel.positionBody': '옮겨 둔 위치는 다음에 열 때도 그대로예요.',
+  'panel.topLeft': '왼쪽 위',
+  'panel.topRight': '오른쪽 위',
+  'panel.bottomLeft': '왼쪽 아래',
+  'panel.bottomRight': '오른쪽 아래',
+  'panel.onTop': '다른 창보다 항상 위에',
+  'panel.onTopBody': '패널의 핀 버튼으로도 켜고 끌 수 있어요.',
+  'panel.autostart': 'Windows 로그인 시 자동 실행',
+  'panel.autostartBody': '패널만 열려요. 전체 앱은 패널의 창 버튼으로 열 수 있어요.',
+  'panel.widgets': '패널에 보일 위젯',
+  'panel.widgetsBody': '뽀모도로와 이미지 카드는 한눈에 보기에서만 쓸 수 있어요.',
+  'panel.pin': '다른 창보다 위에 고정',
+  'panel.unpin': '위에 고정 해제',
+  'panel.openApp': 'Nora 열기',
+  'panel.collapse': '패널 접기',
+  'panel.expand': '패널 펼치기',
+  'panel.empty': '설정 → 오버레이 패널에서 위젯을 골라 주세요.',
   'menu.edit': '편집',
   'menu.copy': '복사',
   'menu.paste': '붙여넣기',
@@ -1859,6 +1904,7 @@ export async function setLocale(locale: Locale) {
   i18n.locale = locale;
   document.documentElement.lang = locale;
   await api.setSetting('ui.locale', locale).catch(() => {});
+  broadcastPrefs();
 }
 
 export async function initLocale() {

@@ -7,6 +7,7 @@ mod db;
 mod expenses;
 mod health;
 mod images;
+mod panel;
 mod reading;
 mod recurrence;
 mod reminders;
@@ -48,6 +49,11 @@ fn serve_image(app: &tauri::AppHandle, request: tauri::http::Request<Vec<u8>>) -
 
 fn main() {
     tauri::Builder::default()
+        // Registered first: a second launch (e.g. the sign-in entry while the app is open) is
+        // handed to the running app instead of starting another copy.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| panel::on_second_instance(app, args)))
+        // Sign-in start opens just the overlay panel.
+        .plugin(tauri_plugin_autostart::Builder::new().args([panel::START_ARG]).build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
@@ -55,8 +61,11 @@ fn main() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED)
+                // The panel stores its own position (see panel.rs).
+                .with_denylist(&[panel::LABEL])
                 .build(),
         )
+        .on_window_event(panel::on_window_event)
         .register_uri_scheme_protocol("noraimg", |ctx, request| serve_image(ctx.app_handle(), request))
         .setup(|app| {
             // NORA_DATA_DIR lets you point the app at a scratch database while developing.
@@ -79,10 +88,29 @@ fn main() {
             reminders::start(app.handle().clone(), db_path.clone());
             let tracker = tracker::start(db_path, tracker::TrackerSettings::load(&db));
             app.manage(AppState { db: Mutex::new(db), tracker, images_dir, data_dir: dir });
+
+            // The main window starts hidden (tauri.conf.json). Started from sign-in, only the panel
+            // shows; otherwise the main window does, plus the panel if it was left on.
+            let handle = app.handle().clone();
+            let panel_start = std::env::args().any(|a| a == panel::START_ARG);
+            let panel_shown = (panel_start || panel::enabled(&handle))
+                && panel::open(&handle).map_err(|e| eprintln!("could not open the panel: {e}")).is_ok();
+            if !(panel_start && panel_shown)
+                && let Some(main) = app.get_webview_window("main")
+            {
+                main.show()?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::set_titlebar_colors,
+            panel::panel_status,
+            panel::panel_set_enabled,
+            panel::panel_set_on_top,
+            panel::panel_set_collapsed,
+            panel::panel_place,
+            panel::panel_show_main,
+            panel::set_autostart,
             commands::get_setting,
             commands::export_data,
             commands::inspect_backup,

@@ -4,7 +4,10 @@
   import { CircleCheck, PanelLeftClose, PanelLeftOpen, Pause, Play, Settings as SettingsIcon, Sticker } from '@lucide/svelte';
   import { api, type TrackerStatus } from './lib/api';
   import { pomodoro, PHASES } from './lib/pomodoro.svelte';
-  import { initSidebar, initTheme, setSidebarCollapsed, toast, ui } from './lib/state.svelte';
+  import { data, initSidebar, initTheme, setSidebarCollapsed, toast, ui } from './lib/state.svelte';
+  import { initSync } from './lib/sync.svelte';
+  import { isPage } from './lib/panel';
+  import { listen } from '@tauri-apps/api/event';
   import { initLocale, t } from './lib/i18n.svelte';
   import { initPages, visiblePages } from './lib/pages.svelte';
   import { trackState } from './lib/tracker';
@@ -56,6 +59,20 @@
     loadStickers();
     loadCalPrefs();
     initReminders();
+    // Changes made in the overlay panel reload here, and its links open pages here.
+    initSync(data, refreshTags, () => {
+      initTheme();
+      initLocale();
+      loadCalPrefs();
+    });
+    if ('__TAURI_INTERNALS__' in window) {
+      listen<{ page?: unknown; day?: unknown; memo?: unknown }>('nora://navigate', ({ payload }) => {
+        if (!isPage(payload?.page)) return;
+        if (typeof payload.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(payload.day)) ui.calendarFocus = payload.day;
+        if (Number.isInteger(payload.memo)) ui.memoFocus = payload.memo as number;
+        ui.page = payload.page;
+      });
+    }
     const poll = async () => (tracker = await api.trackerStatus().catch(() => null));
     poll();
     const timer = setInterval(poll, 2000);

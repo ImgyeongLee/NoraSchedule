@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "panel",
+  "description": "Overlay panel: only what its widgets need (no file dialogs, notifications or window resizing from script)",
+  "windows": [
+    "panel"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "opener:default"
+  ]
+}

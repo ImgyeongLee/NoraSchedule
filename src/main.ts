@@ -4,6 +4,7 @@ import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import '@fontsource-variable/noto-sans-jp';
 import './app.css';
 import App from './App.svelte';
+import PanelApp from './PanelApp.svelte';
 import { ui, type Page } from './lib/state.svelte';
 
 async function start() {
@@ -18,7 +19,11 @@ async function start() {
     const accent = params.get('accent');
     if (accent) localStorage.setItem('nora.previewAccent', accent);
   }
-  mount(App, { target: document.getElementById('app')! });
+  // The overlay panel window loads this same page; it shows the compact panel UI instead.
+  const isPanel = '__TAURI_INTERNALS__' in window
+    ? (await import('@tauri-apps/api/window')).getCurrentWindow().label === 'panel'
+    : new URLSearchParams(location.search).has('panel');
+  mount(isPanel ? PanelApp : App, { target: document.getElementById('app')! });
 }
 
 start();

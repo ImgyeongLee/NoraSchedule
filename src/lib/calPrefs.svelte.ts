@@ -1,6 +1,7 @@
 // Calendar preferences (Settings → Calendar), stored in the database so they are backed up.
 import { api, type CalEvent } from './api';
 import { isAllDayLane } from './dates';
+import { broadcastPrefs } from './sync.svelte';
 
 export type TimePicker = 'list' | 'precise';
 
@@ -27,7 +28,9 @@ export async function loadCalPrefs() {
 
 export function setCalPrefs(patch: Partial<typeof calPrefs>) {
   Object.assign(calPrefs, patch);
-  api.setSetting(SETTING, JSON.stringify(calPrefs)).catch(() => {});
+  api.setSetting(SETTING, JSON.stringify(calPrefs))
+    .catch(() => {})
+    .then(broadcastPrefs);
 }
 
 /** A day's events in display order: timed by start time, all-day ones last (or first). */

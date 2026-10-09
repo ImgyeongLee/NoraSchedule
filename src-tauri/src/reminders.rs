@@ -59,7 +59,9 @@ pub fn start(app: AppHandle, db_path: PathBuf) {
             match db.events_between(today, today + chrono::Duration::days(MAX_REMINDER_DAYS + 1)) {
                 Ok(events) => {
                     for reminder in due(events, now, &mut fired) {
-                        let _ = app.emit("reminder", reminder);
+                        // Only the main window handles reminders (it exists even while hidden), so the
+                        // panel does not show a second notification.
+                        let _ = app.emit_to("main", "reminder", reminder);
                     }
                 }
                 Err(e) => eprintln!("reminders could not read events: {e}"),

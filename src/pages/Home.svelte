@@ -1,6 +1,7 @@
 <script lang="ts">
   import Select from '../components/Select.svelte';
-  import { onMount, type Component } from 'svelte';
+  import { onMount } from 'svelte';
+  import { WIDGET_COMPONENTS } from '../widgets/registry';
   import { api, type DDay } from '../lib/api';
   import { flip } from 'svelte/animate';
   import { fade } from 'svelte/transition';
@@ -14,41 +15,10 @@
   } from '../lib/home.svelte';
   import { data, load, toast } from '../lib/state.svelte';
   import { byDdayTarget, ddayLabel, ddayUpcoming } from '../lib/dates';
-  import DDayCardWidget from '../widgets/DDayCardWidget.svelte';
-  import BookmarksWidget from '../widgets/BookmarksWidget.svelte';
-  import ExpensesWidget from '../widgets/ExpensesWidget.svelte';
-  import HealthWidget from '../widgets/HealthWidget.svelte';
-  import GreetingWidget from '../widgets/GreetingWidget.svelte';
-  import AgendaWidget from '../widgets/AgendaWidget.svelte';
-  import CalendarWidget from '../widgets/CalendarWidget.svelte';
-  import TodosWidget from '../widgets/TodosWidget.svelte';
-  import DDaysWidget from '../widgets/DDaysWidget.svelte';
-  import PomodoroWidget from '../widgets/PomodoroWidget.svelte';
-  import WorkingWidget from '../widgets/WorkingWidget.svelte';
-  import WeekChartWidget from '../widgets/WeekChartWidget.svelte';
-  import ProgressWidget from '../widgets/ProgressWidget.svelte';
-  import MemosWidget from '../widgets/MemosWidget.svelte';
-  import ImageCardWidget from '../widgets/ImageCardWidget.svelte';
   import ImageFrame from '../components/ImageFrame.svelte';
   import ImageFramer from '../components/ImageFramer.svelte';
 
-  const COMPONENTS: Record<WidgetId, Component<any>> = {
-    dday: DDayCardWidget,
-    bookmarks: BookmarksWidget,
-    expenses: ExpensesWidget,
-    health: HealthWidget,
-    greeting: GreetingWidget,
-    agenda: AgendaWidget,
-    calendar: CalendarWidget,
-    todos: TodosWidget,
-    ddays: DDaysWidget,
-    pomodoro: PomodoroWidget,
-    working: WorkingWidget,
-    weekChart: WeekChartWidget,
-    progress: ProgressWidget,
-    memos: MemosWidget,
-    image: ImageCardWidget,
-  };
+  const COMPONENTS = WIDGET_COMPONENTS;
 
   let editing = $state(false);
   let editingHeader = $state(false);
