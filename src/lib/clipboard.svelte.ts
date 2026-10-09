@@ -201,6 +201,26 @@ export async function setEventCancelled(e: CalEvent, cancelled: boolean) {
   }
 }
 
+/** Moves an event (dragged in the calendar); for a repeating event asks "just this one / all". Offers undo. */
+export async function moveEventWithUndo(e: CalEvent, start: string, end: string) {
+  if (start === e.start && end === e.end) return;
+  const scope = isRepeatingOccurrence(e) ? await askScope('save') : 'all';
+  if (!scope) return;
+  try {
+    const id = await api.saveEvent({ ...e, start, end }, scope);
+    data.version++;
+    const day = e.occurrence;
+    // A moved occurrence of a series now falls on the new date, which is what undo must refer to.
+    const undo =
+      scope === 'one' && day
+        ? () => run(async () => { await api.deleteEvent(id, null, 'all'); await api.restoreOccurrence(e.id, day); }, t('event.saved'))
+        : () => run(() => api.saveEvent({ ...e, occurrence: day ? dateOf(start) : null }, scope), t('event.saved'));
+    toast(t('event.moved', { name: e.title }), 'info', { label: t('common.undo'), run: undo });
+  } catch (err) {
+    toast(String(err), 'error');
+  }
+}
+
 export async function deleteTodoWithUndo(tree: TodoTree) {
   const snapshot: TodoTree = JSON.parse(JSON.stringify(tree));
   pointer.copy = null;

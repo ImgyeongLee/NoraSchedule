@@ -9,6 +9,7 @@
   import { eventMenu, pasteAsEvent, pasteOnHover } from '../lib/clipboard.svelte';
   import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
+  import { sortDayEvents } from '../lib/calPrefs.svelte';
   import { eventColor } from '../lib/tags.svelte';
   import TagDots from '../components/TagDots.svelte';
 
@@ -40,7 +41,7 @@
     {#each ddays as d (d.id)}
       <div class="dday" style:--c={hex(d.color)}><Target size={14} /> {d.title}</div>
     {/each}
-    {#each events as e (`${e.id}-${e.occurrence}`)}
+    {#each sortDayEvents(events) as e (`${e.id}-${e.occurrence}`)}
       <button
         class="item event-block"
         class:cancelled={e.cancelled}

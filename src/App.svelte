@@ -18,6 +18,7 @@
   import { initZoom, stepZoom } from './lib/window.svelte';
   import StickerLayer from './components/StickerLayer.svelte';
   import { loadStickers, setDecorating, stickers } from './lib/stickers.svelte';
+  import { loadCalPrefs } from './lib/calPrefs.svelte';
   import Home from './pages/Home.svelte';
   import Calendar from './pages/Calendar.svelte';
   import DDays from './pages/DDays.svelte';
@@ -52,6 +53,7 @@
     pomodoro.load();
     refreshTags();
     loadStickers();
+    loadCalPrefs();
     initReminders();
     const poll = async () => (tracker = await api.trackerStatus().catch(() => null));
     poll();

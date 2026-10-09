@@ -27,12 +27,15 @@ pub struct TrpgEntry {
     /// When it was played (`played` entries).
     #[serde(default)]
     pub date: Option<NaiveDate>,
-    /// `gm`, `pl` or empty (`played` entries).
+    /// Roles played, comma-separated: `gm`, `pl`, `HO1`, `PC2`… (`played` entries); empty for none.
     #[serde(default)]
     pub role: String,
-    /// The characters who played it together, e.g. "Alice & Bob" (`played` entries).
+    /// Kept from an earlier version (who played together); no longer shown.
     #[serde(default)]
     pub pair: String,
+    /// User-named group the entry is filed under, e.g. "CoC 타이만"; empty for none.
+    #[serde(default)]
+    pub folder: String,
     #[serde(default)]
     pub memo: String,
     #[serde(default)]
@@ -41,10 +44,22 @@ pub struct TrpgEntry {
 
 impl TrpgEntry {
     pub const KINDS: [&'static str; 4] = ["rulebook", "scenario_book", "played", "wishlist"];
-    pub const ROLES: [&'static str; 3] = ["", "gm", "pl"];
+
+    /// Cleans a comma-separated role list: trimmed, no empties or duplicates, sensible lengths.
+    pub fn clean_roles(roles: &str) -> String {
+        let mut out: Vec<String> = Vec::new();
+        for role in roles.split(',').map(str::trim).filter(|r| !r.is_empty()) {
+            let role: String = role.chars().take(24).collect();
+            if !out.iter().any(|r| r.eq_ignore_ascii_case(&role)) {
+                out.push(role);
+            }
+        }
+        out.truncate(20);
+        out.join(",")
+    }
 }
 
-const COLUMNS: &str = "id, kind, title, writer, system, links, image, date, role, memo, created_at, pair";
+const COLUMNS: &str = "id, kind, title, writer, system, links, image, date, role, memo, created_at, pair, folder";
 
 /// Links are stored one per line, like event links.
 fn links_text(links: &[String]) -> String {
@@ -67,6 +82,7 @@ fn entry_from_row(r: &Row) -> DbResult<TrpgEntry> {
         memo: r.get(9)?,
         created_at: r.get(10)?,
         pair: r.get(11)?,
+        folder: r.get(12)?,
     })
 }
 
@@ -84,21 +100,21 @@ impl Db {
         if e.id == 0 {
             let created = if e.created_at > 0 { e.created_at } else { now_ts() };
             self.conn.execute(
-                "INSERT INTO trpg_entries(kind, title, writer, system, links, image, date, role, memo, created_at, pair)
-                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT INTO trpg_entries(kind, title, writer, system, links, image, date, role, memo, created_at, pair, folder)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     e.kind, e.title, e.writer, e.system, links_text(&e.links), e.image, date, e.role, e.memo, created,
-                    e.pair.trim()
+                    e.pair.trim(), e.folder.trim()
                 ],
             )?;
             Ok(self.conn.last_insert_rowid())
         } else {
             self.conn.execute(
                 "UPDATE trpg_entries SET kind=?1, title=?2, writer=?3, system=?4, links=?5, image=?6, date=?7, role=?8, memo=?9,
-                 pair=?10 WHERE id=?11",
+                 pair=?10, folder=?11 WHERE id=?12",
                 params![
                     e.kind, e.title, e.writer, e.system, links_text(&e.links), e.image, date, e.role, e.memo,
-                    e.pair.trim(), e.id
+                    e.pair.trim(), e.folder.trim(), e.id
                 ],
             )?;
             Ok(e.id)
@@ -133,9 +149,23 @@ mod tests {
             date: date.map(d),
             role: String::new(),
             pair: String::new(),
+            folder: String::new(),
             memo: String::new(),
             created_at: 0,
         }
+    }
+
+    #[test]
+    fn roles_are_cleaned_and_folders_round_trip() {
+        assert_eq!(TrpgEntry::clean_roles(" gm, pl ,,HO1, gm ,PC2"), "gm,pl,HO1,PC2");
+        assert_eq!(TrpgEntry::clean_roles(""), "");
+        let (db, path) = temp_db();
+        let id = db
+            .save_trpg_entry(&TrpgEntry { role: "gm,HO2".into(), folder: "CoC 타이만".into(), ..entry("played", "Duo", None) })
+            .unwrap();
+        let saved = db.trpg_entries().unwrap().into_iter().find(|e| e.id == id).unwrap();
+        assert_eq!((saved.role.as_str(), saved.folder.as_str()), ("gm,HO2", "CoC 타이만"));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

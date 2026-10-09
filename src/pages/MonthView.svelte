@@ -1,6 +1,6 @@
 <script lang="ts">
   import { CalendarDays, Repeat, Target } from '@lucide/svelte';
-  import { eventMenu, pasteAsEvent, pasteOnHover, slotMenu } from '../lib/clipboard.svelte';
+  import { eventMenu, moveEventWithUndo, pasteAsEvent, pasteOnHover, slotMenu } from '../lib/clipboard.svelte';
   import { eventHover, hideHoverCard, showHoverCard } from '../lib/hovercard.svelte';
   import { isSecondaryClick, openMenu } from '../lib/menu.svelte';
   import type { CalEvent, DDay } from '../lib/api';
@@ -9,7 +9,10 @@
   import TodoChip from '../components/TodoChip.svelte';
   import TagDots from '../components/TagDots.svelte';
   import { eventColor } from '../lib/tags.svelte';
-  import { covers, fmt, isAllDayLane, monthStart, range, timeOf, today, weekStart, weekdayNames } from '../lib/dates';
+  import { calPrefs } from '../lib/calPrefs.svelte';
+  import {
+    addDays, covers, diffDays, eventSpan, fmt, isAllDayLane, monthStart, range, shiftDays, timeOf, today, weekStart, weekdayNames,
+  } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
 
   let {
@@ -53,6 +56,43 @@
     dragFrom = dragTo = null;
   }
 
+  // ---- drag an event onto another day to move it (times stay the same)
+  let moving = $state<{ e: CalEvent; grabDay: string; overDay: string; x: number; y: number; active: boolean } | null>(null);
+  /** Set after a drag so the click that ends it does not also open the event. */
+  let justMoved = false;
+  const dayAt = (x: number, y: number) =>
+    (document.elementsFromPoint(x, y).find((el) => el instanceof HTMLElement && el.dataset.day) as HTMLElement | undefined)?.dataset.day;
+  const moveDelta = $derived(moving?.active ? diffDays(moving.overDay, moving.grabDay) : 0);
+  /** The days the dragged event would cover if dropped now. */
+  const dropRange = $derived.by(() => {
+    if (!moving?.active) return null;
+    const [a, b] = eventSpan(moving.e);
+    return [addDays(a, moveDelta), addDays(b, moveDelta)] as const;
+  });
+  const inDrop = (day: string) => !!dropRange && day >= dropRange[0] && day <= dropRange[1];
+
+  function grab(ev: PointerEvent, e: CalEvent) {
+    hideHoverCard();
+    if (ev.button !== 0 || isSecondaryClick(ev)) return;
+    const day = dayAt(ev.clientX, ev.clientY);
+    if (day) moving = { e, grabDay: day, overDay: day, x: ev.clientX, y: ev.clientY, active: false };
+  }
+
+  function drag(ev: PointerEvent) {
+    if (!moving) return;
+    if (!moving.active && Math.hypot(ev.clientX - moving.x, ev.clientY - moving.y) > 5) moving.active = true;
+    if (moving.active) moving.overDay = dayAt(ev.clientX, ev.clientY) ?? moving.overDay;
+  }
+
+  function drop() {
+    if (moving?.active) {
+      justMoved = true;
+      setTimeout(() => (justMoved = false));
+      if (moveDelta !== 0) moveEventWithUndo(moving.e, shiftDays(moving.e.start, moveDelta), shiftDays(moving.e.end, moveDelta));
+    }
+    moving = null;
+  }
+
   const days = $derived(range(weekStart(monthStart(cursor)), 42));
   const weeks = $derived(Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7)));
   const month = $derived(cursor.slice(0, 7));
@@ -63,7 +103,7 @@
 
   /** Lays out a week: multi-day events become one bar across the days they cover. */
   function layoutWeek(week: string[]) {
-    const { placed, lanesPerDay } = layoutLanes(week, ddays, events, todos);
+    const { placed, lanesPerDay } = layoutLanes(week, ddays, events, todos, calPrefs.allDayLast);
     // If any day overflows, keep the last row for "+N more" buttons.
     const overflow = lanesPerDay.some((n) => n > capacity);
     const limit = overflow ? capacity - 1 : capacity;
@@ -73,9 +113,13 @@
 </script>
 
 <!-- A right-click during a drag cancels it (capture: item menus stop propagation). -->
-<svelte:window onpointerup={dragEnd} oncontextmenucapture={() => (dragFrom = dragTo = null)} />
+<svelte:window
+  onpointermove={drag}
+  onpointerup={() => { dragEnd(); drop(); }}
+  oncontextmenucapture={() => { dragFrom = dragTo = null; moving = null; }}
+/>
 
-<div class="month">
+<div class="month" class:moving={moving?.active}>
   <div class="dow">
     {#each weekdayNames() as d, i (i)}<div>{d}</div>{/each}
   </div>
@@ -89,6 +133,8 @@
             class:other={day.slice(0, 7) !== month}
             class:selected={day === cursor}
             class:in-range={inRange(day)}
+            class:drop={inDrop(day)}
+            data-day={day}
             onpointerdown={(e) => dragStart(e, day)}
             onpointerenter={() => dragFrom && (dragTo = day)}
             onclick={() => onselect(day)}
@@ -123,14 +169,15 @@
                 class:cancelled={e.cancelled}
                 class:from-prev={b.fromPrev}
                 class:to-next={b.toNext}
+                class:dragged={moving?.active && moving.e.id === e.id && moving.e.occurrence === e.occurrence}
                 style:grid-column="{b.col + 1} / span {b.span}"
                 style:grid-row={b.lane + 1}
                 style:--c={hex(eventColor(e))}
                 style:--on-c={textOn(eventColor(e))}
-                onclick={(ev) => { ev.stopPropagation(); onopen(e); }}
+                onclick={(ev) => { ev.stopPropagation(); if (!justMoved) onopen(e); }}
                 ondblclick={(ev) => ev.stopPropagation()}
-                title={isAllDayLane(e) ? e.title : `${timeOf(e.start)} ${e.title}`}
                 {...eventHover(e)}
+                onpointerdown={(ev) => grab(ev, e)}
                 oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => onopen(e)))}
               >
                 {#if e.repeat}<Repeat size={11} />{/if}
@@ -217,6 +264,17 @@
   }
   .cell.selected {
     background: color-mix(in srgb, var(--primary) 7%, transparent);
+  }
+  .week .cell.drop {
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+  .month.moving,
+  .month.moving * {
+    cursor: grabbing !important;
+  }
+  .chip.dragged {
+    opacity: 0.45;
   }
   .week .cell.in-range {
     background: color-mix(in srgb, var(--primary) 16%, transparent);

@@ -24,6 +24,8 @@ export function layoutLanes(
   ddays: DDay[],
   events: CalEvent[],
   todos: CalTodo[] = [],
+  /** Put single-day all-day events after timed ones (multi-day bars stay on top). */
+  allDayLast = false,
 ): { placed: Placed[]; lanesPerDay: number[] } {
   const first = days[0];
   const last = days[days.length - 1];
@@ -47,8 +49,15 @@ export function layoutLanes(
       items.push({ kind: 'todo', t, col: diffDays(due, first), span: 1, fromPrev: false, toNext: false });
     }
   }
-  // Earlier and longer first, so bars stack the way people expect; D-Days and all-day items on top, todos last.
-  const rank = (i: Item) => (i.kind === 'dday' ? 0 : i.kind === 'todo' ? 3 : isAllDayLane(i.e) ? 1 : 2);
+  // Earlier and longer first, so bars stack the way people expect: D-Days and multi-day bars on top,
+  // then timed events, single-day all-day events (above or below the timed ones), and todos last.
+  const rank = (i: Item) => {
+    if (i.kind === 'dday') return 0;
+    if (i.kind === 'todo') return 4;
+    const [a, b] = eventSpan(i.e);
+    if (a !== b) return 1;
+    return isAllDayLane(i.e) ? (allDayLast ? 3 : 1) : 2;
+  };
   items.sort(
     (x, y) =>
       x.col - y.col ||

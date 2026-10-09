@@ -145,10 +145,12 @@ export interface TrpgEntry {
   image: string | null;
   /** When it was played (`played` entries). */
   date: DateStr | null;
-  /** Played as game master or player; '' when not recorded. */
-  role: '' | 'gm' | 'pl';
-  /** The characters who played it together, e.g. "Alice & Bob" (`played` entries); '' for none. */
+  /** Roles played, comma-separated: 'gm', 'pl', 'HO1', 'PC2'… (see lib/trpgRoles.ts); '' when not recorded. */
+  role: string;
+  /** Kept from an earlier version (who played together); no longer shown. */
   pair: string;
+  /** User-named group the entry is filed under, e.g. "CoC 타이만"; '' for none. */
+  folder: string;
   memo: string;
   created_at: number;
 }
@@ -288,6 +290,8 @@ export const api = {
   deleteBookmarkFolder: (id: number) => invoke<void>('delete_bookmark_folder', { id }),
   bookmarks: () => invoke<Bookmark[]>('bookmarks'),
   saveBookmark: (bookmark: Bookmark) => invoke<number>('save_bookmark', { bookmark }),
+  /** Saves the order bookmarks are shown in; `ids` lists them first to last. */
+  reorderBookmarks: (ids: number[]) => invoke<void>('reorder_bookmarks', { ids }),
   deleteBookmark: (id: number) => invoke<Bookmark | null>('delete_bookmark', { id }),
 
   expensesBetween: (from: DateStr, to: DateStr) => invoke<Expense[]>('expenses_between', { from, to }),

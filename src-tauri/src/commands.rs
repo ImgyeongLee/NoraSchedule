@@ -357,6 +357,11 @@ pub fn save_bookmark(state: State<AppState>, bookmark: Bookmark) -> CmdResult<i6
 }
 
 #[tauri::command]
+pub fn reorder_bookmarks(state: State<AppState>, ids: Vec<i64>) -> CmdResult<()> {
+    with_db(&state, |db| db.reorder_bookmarks(&ids))
+}
+
+#[tauri::command]
 pub fn delete_bookmark(state: State<AppState>, id: i64) -> CmdResult<Option<Bookmark>> {
     with_db(&state, |db| db.delete_bookmark(id))
 }
@@ -374,11 +379,13 @@ pub fn save_trpg_entry(state: State<AppState>, entry: TrpgEntry) -> CmdResult<i6
     if title.is_empty() {
         return Err("title required".into());
     }
-    if !TrpgEntry::KINDS.contains(&entry.kind.as_str()) || !TrpgEntry::ROLES.contains(&entry.role.as_str()) {
+    if !TrpgEntry::KINDS.contains(&entry.kind.as_str()) {
         return Err("invalid entry".into());
     }
     let entry = TrpgEntry {
         title: title.into(),
+        role: TrpgEntry::clean_roles(&entry.role),
+        folder: entry.folder.trim().chars().take(60).collect(),
         writer: entry.writer.trim().into(),
         system: entry.system.trim().into(),
         memo: entry.memo.trim().into(),

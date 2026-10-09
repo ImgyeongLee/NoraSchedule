@@ -1,11 +1,13 @@
 <script lang="ts">
-  // Time picker: a button showing the time, opening a list of times (every 15 minutes)
-  // plus a box to type any exact time, e.g. "9:05", "0905" or "21:30".
+  // Time picker: a button showing the time, opening either a list of times (every 15 minutes)
+  // or, when chosen in Settings, AM/PM with hour 1–12 and minute 0–59 columns.
+  // Both have a box to type any exact time, e.g. "9:05", "0905" or "21:30".
   import { Clock, ChevronDown } from '@lucide/svelte';
   import { tick } from 'svelte';
   import Popover from './Popover.svelte';
   import { pad } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
+  import { calPrefs } from '../lib/calPrefs.svelte';
 
   let { value = $bindable(), label, onchange }: { value: string; label?: string; onchange?: (value: string) => void } = $props();
 
@@ -15,6 +17,25 @@
   let typed = $state('');
 
   const TIMES = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
+  const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
+  const MINUTES = Array.from({ length: 60 }, (_, i) => i);
+
+  const precise = $derived(calPrefs.timePicker === 'precise');
+  const h24 = $derived(Number(value.slice(0, 2)) || 0);
+  const minute = $derived(Number(value.slice(3, 5)) || 0);
+  const pm = $derived(h24 >= 12);
+  const h12 = $derived(h24 % 12 || 12);
+  let hourCol = $state<HTMLDivElement>();
+  let minuteCol = $state<HTMLDivElement>();
+
+  /** Sets the time without closing (precise mode). */
+  function set(hour: number, min: number) {
+    const next = `${pad(hour)}:${pad(min)}`;
+    value = next;
+    onchange?.(next);
+  }
+  const setHour12 = (h: number) => set((h % 12) + (pm ? 12 : 0), minute);
+  const setPm = (on: boolean) => set((h24 % 12) + (on ? 12 : 0), minute);
 
   /** Reads "9", "930", "09:30", "9.30" … as HH:MM, or null if it is not a time. */
   function parse(text: string): string | null {
@@ -35,6 +56,11 @@
     if (!open) return;
     typed = value;
     await tick();
+    if (precise) {
+      hourCol?.querySelector<HTMLElement>('.on')?.scrollIntoView({ block: 'center' });
+      minuteCol?.querySelector<HTMLElement>('.on')?.scrollIntoView({ block: 'center' });
+      return;
+    }
     // Show the current time (or the nearest quarter) in the middle of the list.
     const [h, m] = value.split(':').map(Number);
     list?.querySelector<HTMLElement>(`[data-i="${h * 4 + Math.floor(m / 15)}"]`)?.scrollIntoView({ block: 'center' });
@@ -48,7 +74,7 @@
 </button>
 
 {#if open && button}
-  <Popover anchor={button} onclose={() => (open = false)} width={180}>
+  <Popover anchor={button} onclose={() => (open = false)} width={precise ? 220 : 180}>
     <input
       class="input typed"
       bind:value={typed}
@@ -61,13 +87,37 @@
         }
       }}
     />
-    <div class="list" bind:this={list} role="listbox">
-      {#each TIMES as time, i (time)}
-        <button type="button" class="opt tabular" class:on={time === value} data-i={i} role="option" aria-selected={time === value} onclick={() => pick(time)}>
-          {time}
-        </button>
-      {/each}
-    </div>
+    {#if precise}
+      <div class="segmented ampm">
+        <button type="button" class:active={!pm} onclick={() => setPm(false)}>{t('time.am')}</button>
+        <button type="button" class:active={pm} onclick={() => setPm(true)}>{t('time.pm')}</button>
+      </div>
+      <div class="cols">
+        <div class="list col" bind:this={hourCol} role="listbox" aria-label={t('time.hour')}>
+          {#each HOURS as h (h)}
+            <button type="button" class="opt tabular" class:on={h === h12} role="option" aria-selected={h === h12} onclick={() => setHour12(h)}>
+              {h}{t('time.hourUnit')}
+            </button>
+          {/each}
+        </div>
+        <div class="list col" bind:this={minuteCol} role="listbox" aria-label={t('time.minute')}>
+          {#each MINUTES as m (m)}
+            <button type="button" class="opt tabular" class:on={m === minute} role="option" aria-selected={m === minute} onclick={() => set(h24, m)}>
+              {pad(m)}{t('time.minuteUnit')}
+            </button>
+          {/each}
+        </div>
+      </div>
+      <button type="button" class="btn primary small done" onclick={() => (open = false)}>{t('common.done')}</button>
+    {:else}
+      <div class="list" bind:this={list} role="listbox">
+        {#each TIMES as time, i (time)}
+          <button type="button" class="opt tabular" class:on={time === value} data-i={i} role="option" aria-selected={time === value} onclick={() => pick(time)}>
+            {time}
+          </button>
+        {/each}
+      </div>
+    {/if}
   </Popover>
 {/if}
 
@@ -110,6 +160,27 @@
     gap: 2px;
     max-height: 220px;
     overflow-y: auto;
+  }
+  .ampm {
+    display: flex;
+    margin-bottom: 8px;
+  }
+  .ampm button {
+    flex: 1;
+    justify-content: center;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .col {
+    max-height: 200px;
+  }
+  .done {
+    width: 100%;
+    margin-top: 8px;
+    justify-content: center;
   }
   .opt {
     height: 32px;

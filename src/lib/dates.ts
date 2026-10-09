@@ -73,6 +73,9 @@ export function addMinutes(dt: DateTime, minutes: number): DateTime {
   return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
 }
 
+/** The same time of day, `n` days later (or earlier). */
+export const shiftDays = (dt: DateTime, n: number): DateTime => toDateTime(addDays(dateOf(dt), n), timeOf(dt));
+
 /** Minutes since local midnight of the date-time. */
 export const minutesOf = (dt: DateTime) => Number(dt.slice(11, 13)) * 60 + Number(dt.slice(14, 16));
 

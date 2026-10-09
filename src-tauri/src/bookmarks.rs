@@ -97,7 +97,7 @@ impl Db {
 
     pub fn bookmarks(&self) -> DbResult<Vec<Bookmark>> {
         let mut st = self.conn.prepare(
-            "SELECT id, folder_id, title, url, kind, note, created_at FROM bookmarks ORDER BY created_at DESC, id DESC",
+            "SELECT id, folder_id, title, url, kind, note, created_at FROM bookmarks ORDER BY position, created_at DESC, id DESC",
         )?;
         st.query_map([], bookmark_from_row)?.collect()
     }
@@ -105,7 +105,9 @@ impl Db {
     pub fn save_bookmark(&self, b: &Bookmark) -> DbResult<i64> {
         if b.id == 0 {
             self.conn.execute(
-                "INSERT INTO bookmarks(folder_id, title, url, kind, note, created_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+                // New links go first, like before ordering existed.
+                "INSERT INTO bookmarks(folder_id, title, url, kind, note, created_at, position)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, (SELECT COALESCE(MIN(position), 0) - 1 FROM bookmarks))",
                 params![b.folder_id, b.title, b.url, b.kind, b.note, if b.created_at > 0 { b.created_at } else { now_ts() }],
             )?;
             Ok(self.conn.last_insert_rowid())
@@ -116,6 +118,15 @@ impl Db {
             )?;
             Ok(b.id)
         }
+    }
+
+    /// Saves the order links are shown in (dragged into place); `ids` lists them first to last.
+    pub fn reorder_bookmarks(&self, ids: &[i64]) -> DbResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (position, id) in ids.iter().enumerate() {
+            tx.execute("UPDATE bookmarks SET position=?1 WHERE id=?2", params![position as i64, id])?;
+        }
+        tx.commit()
     }
 
     /// Deletes a link and returns it, so the deletion can be undone.
@@ -156,6 +167,21 @@ mod tests {
         assert_eq!(folders.iter().find(|f| f.id == specs).unwrap().parent_id, Some(work));
         assert_eq!(db.bookmarks().unwrap().iter().find(|b| b.id == a).unwrap().folder_id, Some(work));
         assert!(db.bookmarks().unwrap()[0].created_at > 0);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn links_keep_the_order_they_are_dragged_into_and_new_ones_come_first() {
+        let (db, path) = temp_db();
+        let a = link(&db, None, "A");
+        let b = link(&db, None, "B");
+        let c = link(&db, None, "C");
+        let order = |db: &Db| db.bookmarks().unwrap().iter().map(|x| x.id).collect::<Vec<_>>();
+        assert_eq!(order(&db), [c, b, a]);
+        db.reorder_bookmarks(&[a, c, b]).unwrap();
+        assert_eq!(order(&db), [a, c, b]);
+        let d = link(&db, None, "D");
+        assert_eq!(order(&db), [d, a, c, b]);
         let _ = std::fs::remove_file(path);
     }
 

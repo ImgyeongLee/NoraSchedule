@@ -93,6 +93,7 @@ fn main() {
             commands::bookmarks,
             commands::save_bookmark,
             commands::delete_bookmark,
+            commands::reorder_bookmarks,
             commands::expenses_between,
             commands::save_expense,
             commands::delete_expense,

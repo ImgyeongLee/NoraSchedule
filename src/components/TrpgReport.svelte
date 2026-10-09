@@ -8,6 +8,7 @@
   import type { TrpgEntry } from '../lib/api';
   import { colorForName } from '../lib/colors';
   import { today } from '../lib/dates';
+  import { rolesOf } from '../lib/trpgRoles';
   import { intlLocale, t } from '../lib/i18n.svelte';
 
   let { entries }: { entries: TrpgEntry[] } = $props();
@@ -20,8 +21,10 @@
   const scope = $derived(year && years.includes(year) ? year : '');
   const inScope = $derived(scope ? played.filter((e) => e.date?.startsWith(scope)) : played);
 
-  const gm = $derived(inScope.filter((e) => e.role === 'gm').length);
-  const pl = $derived(inScope.filter((e) => e.role === 'pl').length);
+  // A session can be both GM and PL (and have HO/PC slots too).
+  const gm = $derived(inScope.filter((e) => rolesOf(e.role).includes('gm')).length);
+  const pl = $derived(inScope.filter((e) => rolesOf(e.role).includes('pl')).length);
+  const noRole = $derived(inScope.filter((e) => !rolesOf(e.role).length).length);
   const wishlist = $derived(entries.filter((e) => e.kind === 'wishlist').length);
   const rulebooks = $derived(entries.filter((e) => e.kind === 'rulebook').length);
   const scenarioBooks = $derived(entries.filter((e) => e.kind === 'scenario_book').length);
@@ -76,7 +79,7 @@
     <StatCard
       label={t('trpg.statRoles')}
       value={`GM ${gm} · PL ${pl}`}
-      sub={inScope.length - gm - pl ? t('trpg.statNoRole', { n: inScope.length - gm - pl }) : ''}
+      sub={noRole ? t('trpg.statNoRole', { n: noRole }) : ''}
       icon={Crown}
       tint="var(--warning)"
     />

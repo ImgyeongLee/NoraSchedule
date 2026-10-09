@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { MoonStar, Sun, Sunrise, Sunset } from '@lucide/svelte';
   import { api } from '../lib/api';
-  import { covers, fmt, today } from '../lib/dates';
+  import { covers, today } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
   import { data, load } from '../lib/state.svelte';
 
@@ -34,7 +34,6 @@
   <div class="text">
     <div class="time-icon"><TimeIcon size={20} /></div>
     <h2>{greeting}</h2>
-    <p class="muted">{fmt(today(), { weekday: 'long', month: 'long', day: 'numeric' })}</p>
     <p class="summary">{t('home.summary', { events, todos })}</p>
   </div>
   <div class="clock tabular">{clock}</div>

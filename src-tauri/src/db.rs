@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS bookmarks (
     url        TEXT    NOT NULL,
     kind       TEXT    NOT NULL,
     note       TEXT    NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    position   INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS expenses (
@@ -146,7 +147,8 @@ CREATE TABLE IF NOT EXISTS trpg_entries (
     role       TEXT    NOT NULL DEFAULT '',
     memo       TEXT    NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
-    pair       TEXT    NOT NULL DEFAULT ''
+    pair       TEXT    NOT NULL DEFAULT '',
+    folder     TEXT    NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS books (
@@ -508,6 +510,25 @@ fn migrate(conn: &Connection) -> DbResult<()> {
         .exists([])?;
     if !has_trpg_pair {
         conn.execute_batch("ALTER TABLE trpg_entries ADD COLUMN pair TEXT NOT NULL DEFAULT ''")?;
+    }
+    // Bookmarks used to be listed newest first; keep that order as the starting point.
+    let has_bookmark_position = conn
+        .prepare("SELECT 1 FROM pragma_table_info('bookmarks') WHERE name = 'position'")?
+        .exists([])?;
+    if !has_bookmark_position {
+        conn.execute_batch(
+            "ALTER TABLE bookmarks ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+             UPDATE bookmarks SET position = (
+                 SELECT COUNT(*) FROM bookmarks b2
+                 WHERE b2.created_at > bookmarks.created_at OR (b2.created_at = bookmarks.created_at AND b2.id > bookmarks.id)
+             );",
+        )?;
+    }
+    let has_trpg_folder = conn
+        .prepare("SELECT 1 FROM pragma_table_info('trpg_entries') WHERE name = 'folder'")?
+        .exists([])?;
+    if !has_trpg_folder {
+        conn.execute_batch("ALTER TABLE trpg_entries ADD COLUMN folder TEXT NOT NULL DEFAULT ''")?;
     }
     let has_tags = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'tags'")?

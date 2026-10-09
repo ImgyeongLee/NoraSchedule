@@ -15,6 +15,7 @@
   import { eventMenu, pageTarget, pasteAsEvent } from '../lib/clipboard.svelte';
   import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
+  import { sortDayEvents } from '../lib/calPrefs.svelte';
   import { eventColor, groupedTags, matchesTagFilter, setTagFilter, tagStore, tagsOf, toggleTagFilter } from '../lib/tags.svelte';
   import TagManager from '../components/TagManager.svelte';
   import TodoChip from '../components/TodoChip.svelte';
@@ -66,7 +67,7 @@
     ]),
   );
   const agendaTodos = $derived(todos.filter((x) => x.todo.due === cursor));
-  const agenda = $derived(shownEvents.filter((e) => covers(e, cursor)));
+  const agenda = $derived(sortDayEvents(shownEvents.filter((e) => covers(e, cursor))));
   let managingTags = $state(false);
   const agendaDdays = $derived(ddays.filter((d) => ddayOn(d, cursor)));
   const upcoming = $derived(byDdayTarget(ddays.filter((d) => ddayUpcoming(d))).slice(0, 4));

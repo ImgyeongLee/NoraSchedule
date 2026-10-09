@@ -67,7 +67,7 @@
     flex-direction: column;
     justify-content: flex-end;
     align-items: flex-start;
-    gap: 2px;
+    gap: 0;
     width: calc(100% + 36px);
     height: calc(100% + 36px);
     margin: -18px;
@@ -111,7 +111,6 @@
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
   }
   .photo .label {
-    margin-top: 2px;
     font-size: 26px;
     color: #fff;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
@@ -120,16 +119,18 @@
     font-size: 40px;
     font-weight: 800;
     letter-spacing: -0.03em;
-    line-height: 1.05;
+    line-height: 1;
     color: var(--c);
   }
   .title {
     max-width: 100%;
     font-size: 15px;
     font-weight: 700;
+    line-height: 1.25;
   }
   .date {
     font-size: 12.5px;
+    line-height: 1.25;
     opacity: 0.75;
   }
   .strong {

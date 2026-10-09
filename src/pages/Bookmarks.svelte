@@ -147,10 +147,35 @@
     ]);
   }
 
-  // Drag a link box onto a folder in the sidebar to move it.
+  // Drag a link box onto a folder in the sidebar to move it, or over other boxes to reorder.
+  let draggingId = $state<number | null>(null);
+  let orderChanged = false;
+
   function dragLink(e: DragEvent, b: Bookmark) {
     e.dataTransfer?.setData('application/x-nora-bookmark', String(b.id));
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    draggingId = b.id;
+    orderChanged = false;
+  }
+
+  /** Reorders live while dragging, so the grid shows where the box will land. */
+  function dragOverLink(e: DragEvent, target: Bookmark) {
+    if (draggingId === null || query) return;
+    e.preventDefault();
+    if (draggingId === target.id) return;
+    const from = links.findIndex((b) => b.id === draggingId);
+    const to = links.findIndex((b) => b.id === target.id);
+    if (from < 0 || to < 0) return;
+    const next = [...links];
+    next.splice(to, 0, ...next.splice(from, 1));
+    links = next;
+    orderChanged = true;
+  }
+
+  function dragEndLink() {
+    if (orderChanged) api.reorderBookmarks(links.map((b) => b.id)).catch((e) => toast(String(e), 'error'));
+    draggingId = null;
+    orderChanged = false;
   }
 
   function dropOn(e: DragEvent, target: View) {
@@ -316,7 +341,11 @@
             style:--c={kind.color}
             onclick={() => openUrl(b.url)}
             onkeydown={(e) => e.key === 'Enter' && openUrl(b.url)}
+            class:dragging={draggingId === b.id}
             ondragstart={(e) => dragLink(e, b)}
+            ondragover={(e) => dragOverLink(e, b)}
+            ondrop={(e) => e.preventDefault()}
+            ondragend={dragEndLink}
             oncontextmenu={(e) => linkMenu(e, b)}
             {...copyOnHover(() => copyLink(b))}
           >
@@ -596,6 +625,9 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
     gap: 14px;
+  }
+  .link-card.dragging {
+    opacity: 0.4;
   }
   .link-card {
     position: relative;

@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import {
     AppWindow, ArrowDown, ArrowUp, Check, Database, GripVertical, PanelsTopLeft, RotateCcw, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
-    Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
+    CalendarDays, Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
   } from '@lucide/svelte';
+  import { calPrefs, setCalPrefs } from '../lib/calPrefs.svelte';
   import Modal from '../components/Modal.svelte';
   import { api, type BackupManifest } from '../lib/api';
   import { backupError, exportBackup, pickBackup } from '../lib/backup';
@@ -233,6 +234,33 @@
           </div>
         </div>
       {/if}
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div class="icon"><CalendarDays size={18} /></div>
+        <div>
+          <h2>{t('set.calendar')}</h2>
+          <p class="muted small">{t('set.calendarBody')}</p>
+        </div>
+      </div>
+      <label class="cal-opt">
+        <span>
+          <span class="cal-opt-title">{t('set.allDayLast')}</span>
+          <span class="muted small">{t('set.allDayLastBody')}</span>
+        </span>
+        <input type="checkbox" class="switch" checked={calPrefs.allDayLast} onchange={(e) => setCalPrefs({ allDayLast: e.currentTarget.checked })} />
+      </label>
+      <div class="cal-opt">
+        <span>
+          <span class="cal-opt-title">{t('set.timePicker')}</span>
+          <span class="muted small">{t('set.timePickerBody')}</span>
+        </span>
+        <div class="segmented">
+          <button class:active={calPrefs.timePicker === 'list'} onclick={() => setCalPrefs({ timePicker: 'list' })}>{t('set.timePickerList')}</button>
+          <button class:active={calPrefs.timePicker === 'precise'} onclick={() => setCalPrefs({ timePicker: 'precise' })}>{t('set.timePickerPrecise')}</button>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -635,6 +663,25 @@
   .preview .pv-line:first-child {
     background: var(--primary);
     opacity: 0.8;
+  }
+  .cal-opt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .cal-opt > span {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 260px;
+  }
+  .cal-opt-title {
+    font-weight: 650;
   }
   .accents {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

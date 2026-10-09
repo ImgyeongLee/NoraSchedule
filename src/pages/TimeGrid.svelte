@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { MapPin, Repeat, Target } from '@lucide/svelte';
-  import { eventMenu, pasteAsEvent, pointer, slotMenu } from '../lib/clipboard.svelte';
-  import { eventHover } from '../lib/hovercard.svelte';
+  import { eventMenu, moveEventWithUndo, pasteAsEvent, pointer, slotMenu } from '../lib/clipboard.svelte';
+  import { eventHover, hideHoverCard } from '../lib/hovercard.svelte';
   import { isSecondaryClick, openMenu } from '../lib/menu.svelte';
   import type { CalEvent, DDay } from '../lib/api';
   import { hex, textOn } from '../lib/colors';
@@ -10,7 +10,9 @@
   import TodoChip from '../components/TodoChip.svelte';
   import TagDots from '../components/TagDots.svelte';
   import { eventColor } from '../lib/tags.svelte';
-  import { covers, fmt, isAllDayLane, minutesOf, overlapColumns, pad, timeOf, today } from '../lib/dates';
+  import {
+    addMinutes, covers, fmt, isAllDayLane, minutesOf, overlapColumns, pad, shiftDays, timeOf, toDateTime, today,
+  } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
 
   let {
@@ -91,6 +93,94 @@
   }
 
   /** Half-hour slot under the mouse, in minutes past midnight. */
+  // ---- drag an event to move it: timed ones to another day/time (15-minute steps),
+  // all-day bars to other days.
+  type Moving = {
+    e: CalEvent;
+    kind: 'timed' | 'lane';
+    x: number;
+    y: number;
+    active: boolean;
+    /** Timed: minutes between the event's start and where it was grabbed; its length. */
+    offset: number;
+    length: number;
+    day: string;
+    minutes: number;
+    /** All-day bars: the column grabbed, the column width, and how many days it moved. */
+    grabCol: number;
+    colWidth: number;
+    delta: number;
+  };
+  let moving = $state<Moving | null>(null);
+  let justMoved = false;
+  let laneEl = $state<HTMLDivElement>();
+  const sameEvent = (a: CalEvent, b: CalEvent) => a.id === b.id && a.occurrence === b.occurrence;
+  const minutesIn = (col: Element, y: number) => ((y - col.getBoundingClientRect().top) / HOUR) * 60;
+  const colAt = (x: number, y: number) =>
+    document.elementsFromPoint(x, y).find((el) => el instanceof HTMLElement && el.classList.contains('col') && el.dataset.day) as
+      | HTMLElement
+      | undefined;
+
+  function laneColAt(x: number) {
+    if (!laneEl) return 0;
+    const r = laneEl.getBoundingClientRect();
+    // The lane grid is a 60px gutter, one column per day and 10px of right padding.
+    const width = (r.width - 70) / days.length;
+    return Math.min(days.length - 1, Math.max(0, Math.floor((x - r.left - 60) / width)));
+  }
+
+  function grabTimed(ev: PointerEvent, e: CalEvent, day: string, start: number) {
+    hideHoverCard();
+    ev.stopPropagation();
+    if (ev.button !== 0 || isSecondaryClick(ev)) return;
+    const col = (ev.currentTarget as HTMLElement).closest('.col');
+    if (!col) return;
+    const length = Math.max(15, Math.round((new Date(e.end).getTime() - new Date(e.start).getTime()) / 60_000));
+    moving = {
+      e, kind: 'timed', x: ev.clientX, y: ev.clientY, active: false,
+      offset: minutesIn(col, ev.clientY) - start, length, day, minutes: start, grabCol: 0, colWidth: 0, delta: 0,
+    };
+  }
+
+  function grabLane(ev: PointerEvent, e: CalEvent) {
+    hideHoverCard();
+    if (ev.button !== 0 || isSecondaryClick(ev) || !laneEl) return;
+    const r = laneEl.getBoundingClientRect();
+    moving = {
+      e, kind: 'lane', x: ev.clientX, y: ev.clientY, active: false, offset: 0, length: 0, day: '', minutes: 0,
+      grabCol: laneColAt(ev.clientX), colWidth: (r.width - 70) / days.length, delta: 0,
+    };
+  }
+
+  function moveDrag(ev: PointerEvent) {
+    if (!moving) return;
+    if (!moving.active && Math.hypot(ev.clientX - moving.x, ev.clientY - moving.y) > 5) moving.active = true;
+    if (!moving.active) return;
+    if (moving.kind === 'lane') {
+      moving.delta = laneColAt(ev.clientX) - moving.grabCol;
+      return;
+    }
+    const col = colAt(ev.clientX, ev.clientY);
+    if (!col?.dataset.day) return;
+    const snapped = Math.round((minutesIn(col, ev.clientY) - moving.offset) / 15) * 15;
+    moving.day = col.dataset.day;
+    moving.minutes = Math.min(24 * 60 - moving.length, Math.max(0, snapped));
+  }
+
+  function dropMove() {
+    const m = moving;
+    moving = null;
+    if (!m?.active) return;
+    justMoved = true;
+    setTimeout(() => (justMoved = false));
+    if (m.kind === 'lane') {
+      if (m.delta !== 0) moveEventWithUndo(m.e, shiftDays(m.e.start, m.delta), shiftDays(m.e.end, m.delta));
+      return;
+    }
+    const start = toDateTime(m.day, `${pad(Math.floor(m.minutes / 60))}:${pad(m.minutes % 60)}`);
+    moveEventWithUndo(m.e, start, addMinutes(start, m.length));
+  }
+
   function slotAt(e: MouseEvent): number {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     return Math.min(Math.floor(((e.clientY - rect.top) / HOUR) * 2) * 30, 23 * 60 + 30);
@@ -100,9 +190,13 @@
 </script>
 
 <!-- A right-click during a drag cancels it (capture: item menus stop propagation). -->
-<svelte:window onpointerup={dragEnd} oncontextmenucapture={() => (drag = null)} />
+<svelte:window
+  onpointermove={moveDrag}
+  onpointerup={() => { dragEnd(); dropMove(); }}
+  oncontextmenucapture={() => { drag = null; moving = null; }}
+/>
 
-<div class="tg" style:--cols={days.length}>
+<div class="tg" class:moving={moving?.active} style:--cols={days.length}>
   <div class="head">
     <div></div>
     {#each days as day (day)}
@@ -113,7 +207,7 @@
     {/each}
   </div>
 
-  <div class="lane">
+  <div class="lane" bind:this={laneEl}>
     <div class="gutter-label" style:grid-row="1 / span {laneRows}">{t('cal.allDayLane')}</div>
     {#each lane.placed as b, i (i)}
       {#if b.kind === 'dday'}
@@ -129,13 +223,15 @@
           class:cancelled={e.cancelled}
           class:from-prev={b.fromPrev}
           class:to-next={b.toNext}
+          class:dragged={moving?.active && moving.kind === 'lane' && sameEvent(moving.e, e)}
+          style:transform={moving?.active && moving.kind === 'lane' && sameEvent(moving.e, e) ? `translateX(${moving.delta * moving.colWidth}px)` : undefined}
           style:grid-column="{b.col + 2} / span {b.span}"
           style:grid-row={b.lane + 1}
           style:--c={hex(eventColor(e))}
           style:--on-c={textOn(eventColor(e))}
-          onclick={() => onopen(e)}
-          title={e.title}
+          onclick={() => { if (!justMoved) onopen(e); }}
           {...eventHover(e)}
+          onpointerdown={(ev) => grabLane(ev, e)}
           oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => onopen(e)))}
         >
           <TagDots event={e} />
@@ -157,6 +253,7 @@
         <div
           class="col"
           class:is-today={day === todayStr}
+          data-day={day}
           style:--hour="{HOUR}px"
           onpointerdown={(e) => dragStart(e, day)}
           onpointermove={(e) => {
@@ -175,15 +272,17 @@
             <button
               class="event event-block"
               class:cancelled={t.e.cancelled}
+              class:dragged={moving?.active && moving.kind === 'timed' && sameEvent(moving.e, t.e)}
               style:--c={hex(eventColor(t.e))}
               style:--on-c={textOn(eventColor(t.e))}
               style:top="{(t.s / 60) * HOUR + 1}px"
               style:height="{((t.end - t.s) / 60) * HOUR - 3}px"
               style:left="calc({(t.col / t.cols) * 100}% + 3px)"
               style:width="calc({100 / t.cols}% - 6px)"
-              onclick={(ev) => { ev.stopPropagation(); onopen(t.e); }}
-              onpointermove={(ev) => ev.stopPropagation()}
+              onclick={(ev) => { ev.stopPropagation(); if (!justMoved) onopen(t.e); }}
+              onpointermove={(ev) => { moveDrag(ev); ev.stopPropagation(); }}
               {...eventHover(t.e)}
+              onpointerdown={(ev) => grabTimed(ev, t.e, day, t.s)}
               oncontextmenu={(ev) => openMenu(ev, eventMenu(t.e, () => onopen(t.e)))}
             >
               <span class="ev-title"><TagDots event={t.e} />{#if t.e.repeat}<Repeat size={11} />{/if} {t.e.title}</span>
@@ -191,6 +290,19 @@
               {#if t.e.location}<span class="ev-time truncate loc"><MapPin size={11} /> {t.e.location}</span>{/if}
             </button>
           {/each}
+          {#if moving?.active && moving.kind === 'timed' && moving.day === day}
+            {@const m = moving}
+            <div
+              class="event event-block move-preview"
+              style:--c={hex(eventColor(m.e))}
+              style:--on-c={textOn(eventColor(m.e))}
+              style:top="{(m.minutes / 60) * HOUR + 1}px"
+              style:height="{(m.length / 60) * HOUR - 3}px"
+            >
+              <span class="ev-title">{m.e.title}</span>
+              <span class="ev-time">{pad(Math.floor(m.minutes / 60))}:{pad(m.minutes % 60)}</span>
+            </div>
+          {/if}
           {#if dragBox && day >= dragBox.d0 && day <= dragBox.d1}
             <div
               class="drag-preview"
@@ -372,6 +484,20 @@
     font-size: 11.5px;
     opacity: 0.85;
     max-width: 100%;
+  }
+  .tg.moving,
+  .tg.moving * {
+    cursor: grabbing !important;
+  }
+  .dragged {
+    opacity: 0.4;
+  }
+  .event.move-preview {
+    left: 3px;
+    right: 3px;
+    z-index: 5;
+    pointer-events: none;
+    box-shadow: var(--shadow), 0 0 0 2px var(--surface);
   }
   .drag-preview {
     position: absolute;
