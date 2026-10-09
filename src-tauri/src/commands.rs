@@ -11,6 +11,7 @@ use crate::bookmarks::{Bookmark, BookmarkFolder};
 use crate::expenses::Expense;
 use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, MemoGroup, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
+use crate::trpg::TrpgEntry;
 
 type CmdResult<T> = Result<T, String>;
 
@@ -357,6 +358,41 @@ pub fn save_bookmark(state: State<AppState>, bookmark: Bookmark) -> CmdResult<i6
 #[tauri::command]
 pub fn delete_bookmark(state: State<AppState>, id: i64) -> CmdResult<Option<Bookmark>> {
     with_db(&state, |db| db.delete_bookmark(id))
+}
+
+// ---- TRPG log -------------------------------------------------------------------
+
+#[tauri::command]
+pub fn trpg_entries(state: State<AppState>) -> CmdResult<Vec<TrpgEntry>> {
+    with_db(&state, |db| db.trpg_entries())
+}
+
+#[tauri::command]
+pub fn save_trpg_entry(state: State<AppState>, entry: TrpgEntry) -> CmdResult<i64> {
+    let title = entry.title.trim();
+    if title.is_empty() {
+        return Err("title required".into());
+    }
+    if !TrpgEntry::KINDS.contains(&entry.kind.as_str()) || !TrpgEntry::ROLES.contains(&entry.role.as_str()) {
+        return Err("invalid entry".into());
+    }
+    let entry = TrpgEntry {
+        title: title.into(),
+        writer: entry.writer.trim().into(),
+        system: entry.system.trim().into(),
+        memo: entry.memo.trim().into(),
+        image: entry.image.filter(|name| crate::images::is_safe_name(name)),
+        ..entry
+    };
+    let id = with_db(&state, |db| db.save_trpg_entry(&entry))?;
+    // A replaced or removed cover is no longer referenced: delete the file.
+    remove_unused_images(state)?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn delete_trpg_entry(state: State<AppState>, id: i64) -> CmdResult<Option<TrpgEntry>> {
+    with_db(&state, |db| db.delete_trpg_entry(id))
 }
 
 // ---- expenses -------------------------------------------------------------------

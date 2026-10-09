@@ -5,8 +5,8 @@ import { fromHex } from './colors';
 import { CUSTOM_VAR_NAMES, customThemeVars, DEFAULT_CUSTOM_THEME, parseCustomTheme, type CustomTheme } from './customTheme';
 
 export type Page =
-  | 'home' | 'calendar' | 'ddays' | 'todos' | 'pomodoro' | 'memos' | 'bookmarks' | 'expenses' | 'tracking' | 'analytics'
-  | 'settings';
+  | 'home' | 'calendar' | 'ddays' | 'todos' | 'pomodoro' | 'memos' | 'bookmarks' | 'expenses' | 'trpg' | 'tracking'
+  | 'analytics' | 'settings';
 export type ThemePref = 'light' | 'dark' | 'system';
 export type Accent = 'default' | 'mono' | 'pink' | 'blue' | 'green' | 'brown' | 'custom';
 /** Built-in color themes; 'custom' is the user's own (see customTheme.ts). */

@@ -134,6 +134,20 @@ CREATE TABLE IF NOT EXISTS tags (
     category TEXT    NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS trpg_entries (
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT    NOT NULL,
+    title      TEXT    NOT NULL,
+    writer     TEXT    NOT NULL DEFAULT '',
+    system     TEXT    NOT NULL DEFAULT '',
+    links      TEXT    NOT NULL DEFAULT '',
+    image      TEXT,
+    date       TEXT,
+    role       TEXT    NOT NULL DEFAULT '',
+    memo       TEXT    NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -393,7 +407,7 @@ fn todo_from_row(r: &Row) -> DbResult<Todo> {
 }
 
 pub struct Db {
-    /// Shared with the `impl Db` blocks in `bookmarks.rs` and `expenses.rs`.
+    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs` and `trpg.rs`.
     pub(crate) conn: Connection,
 }
 
@@ -460,6 +474,17 @@ fn migrate(conn: &Connection) -> DbResult<()> {
         .exists([])?;
     if !has_memo_group {
         conn.execute_batch("ALTER TABLE memos ADD COLUMN group_id INTEGER REFERENCES memo_groups(id) ON DELETE SET NULL")?;
+    }
+    // The first TRPG log had a single `link` and no cover image.
+    let has_trpg_links = conn
+        .prepare("SELECT 1 FROM pragma_table_info('trpg_entries') WHERE name = 'links'")?
+        .exists([])?;
+    if !has_trpg_links {
+        conn.execute_batch(
+            "ALTER TABLE trpg_entries ADD COLUMN links TEXT NOT NULL DEFAULT '';
+             ALTER TABLE trpg_entries ADD COLUMN image TEXT;
+             UPDATE trpg_entries SET links = link;",
+        )?;
     }
     let has_tags = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'tags'")?
@@ -731,7 +756,9 @@ impl Db {
 
     /// Image files still referenced by some D-Day.
     pub fn referenced_images(&self) -> DbResult<std::collections::HashSet<String>> {
-        let mut st = self.conn.prepare("SELECT image FROM ddays WHERE image IS NOT NULL")?;
+        let mut st = self.conn.prepare(
+            "SELECT image FROM ddays WHERE image IS NOT NULL UNION SELECT image FROM trpg_entries WHERE image IS NOT NULL",
+        )?;
         let mut names: std::collections::HashSet<String> = st.query_map([], |r| r.get(0))?.collect::<DbResult<_>>()?;
         // The Overview header, image cards and stickers live in JSON settings; keep every image they mention.
         for key in IMAGE_SETTINGS {

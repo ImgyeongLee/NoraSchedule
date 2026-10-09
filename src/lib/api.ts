@@ -129,11 +129,33 @@ export interface Expense {
   note: string;
 }
 
+/** Which TRPG list an entry belongs to. */
+export type TrpgKind = 'rulebook' | 'scenario_book' | 'played' | 'wishlist';
+
+export interface TrpgEntry {
+  id: number;
+  kind: TrpgKind;
+  title: string;
+  /** Scenario writer, or the book's author / publisher. */
+  writer: string;
+  /** Rule system, e.g. "CoC 7th". */
+  system: string;
+  links: string[];
+  /** Cover image file name (books), see lib/images.ts. */
+  image: string | null;
+  /** When it was played (`played` entries). */
+  date: DateStr | null;
+  /** Played as game master or player; '' when not recorded. */
+  role: '' | 'gm' | 'pl';
+  memo: string;
+  created_at: number;
+}
+
 export interface BackupManifest {
   format: number;
   app_version: string;
   exported_at: number;
-  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; images: number };
+  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; trpg?: number; images: number };
 }
 
 export interface Memo {
@@ -246,6 +268,10 @@ export const api = {
   expensesBetween: (from: DateStr, to: DateStr) => invoke<Expense[]>('expenses_between', { from, to }),
   saveExpense: (expense: Expense) => invoke<number>('save_expense', { expense }),
   deleteExpense: (id: number) => invoke<Expense | null>('delete_expense', { id }),
+
+  trpgEntries: () => invoke<TrpgEntry[]>('trpg_entries'),
+  saveTrpgEntry: (entry: TrpgEntry) => invoke<number>('save_trpg_entry', { entry }),
+  deleteTrpgEntry: (id: number) => invoke<TrpgEntry | null>('delete_trpg_entry', { id }),
 
   memos: () => invoke<Memo[]>('memos'),
   createMemo: (title: string, groupId: number | null = null) => invoke<number>('create_memo', { title, groupId }),

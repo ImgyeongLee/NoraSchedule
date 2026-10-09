@@ -1,0 +1,735 @@
+<script lang="ts">
+  // TRPG log: sessions (want to play / played), rule books and scenario books on a shelf, and a report.
+  import { openUrl } from '@tauri-apps/plugin-opener';
+  import {
+    BookOpen, ChartPie, ChevronDown, ExternalLink, Library, Link, Pencil, Plus, ScrollText, Search, Sparkles, Swords, Trash, X,
+  } from '@lucide/svelte';
+  import Modal from '../components/Modal.svelte';
+  import ConfirmButton from '../components/ConfirmButton.svelte';
+  import DateField from '../components/DateField.svelte';
+  import ImagePicker from '../components/ImagePicker.svelte';
+  import TrpgReport from '../components/TrpgReport.svelte';
+  import { api, type TrpgEntry, type TrpgKind } from '../lib/api';
+  import { fmt, today } from '../lib/dates';
+  import { imageUrl } from '../lib/images';
+  import { t, type Key } from '../lib/i18n.svelte';
+  import { openMenu, type MenuItem } from '../lib/menu.svelte';
+  import { data, load, mutate, toast } from '../lib/state.svelte';
+
+  type Tab = 'sessions' | 'rulebook' | 'scenario_book' | 'report';
+  type Sort = 'date' | 'title';
+
+  const TABS: { id: Tab; label: Key; icon: typeof BookOpen }[] = [
+    { id: 'sessions', label: 'trpg.sessions', icon: ScrollText },
+    { id: 'rulebook', label: 'trpg.rulebooks', icon: BookOpen },
+    { id: 'scenario_book', label: 'trpg.scenarioBooks', icon: Library },
+    { id: 'report', label: 'trpg.report', icon: ChartPie },
+  ];
+  const isBook = (kind: TrpgKind) => kind === 'rulebook' || kind === 'scenario_book';
+
+  /** Cloth-cover colors for books without a cover image, picked from the title. */
+  const BOOK_COLORS = ['#2f4a7a', '#7a2e3a', '#2f6b4f', '#b0812a', '#21757d', '#5b3f86', '#8a5a3c', '#3d4f63', '#a8466a'];
+  function bookColor(title: string) {
+    let h = 0x811c9dc5;
+    for (const ch of title) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193) >>> 0;
+    return BOOK_COLORS[h % BOOK_COLORS.length];
+  }
+
+  // Per-viewer conveniences, remembered in this browser only.
+  const PREFS_KEY = 'nora.trpg';
+  function readPrefs(): { tab?: Tab; sort?: Sort; collapsed?: string[] } {
+    try {
+      return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') ?? {};
+    } catch {
+      return {};
+    }
+  }
+  const prefs = readPrefs();
+
+  let entries = $state<TrpgEntry[]>([]);
+  let tab = $state<Tab>(TABS.some((x) => x.id === prefs.tab) ? prefs.tab! : 'sessions');
+  let sort = $state<Sort>(prefs.sort === 'title' ? 'title' : 'date');
+  /** Years folded away in the Played column. */
+  let collapsed = $state<string[]>(Array.isArray(prefs.collapsed) ? prefs.collapsed : []);
+  let query = $state('');
+  let editing = $state<TrpgEntry | null>(null);
+  let newLink = $state('');
+  let error = $state('');
+
+  $effect(() => {
+    const value = JSON.stringify({ tab, sort, collapsed });
+    try {
+      localStorage.setItem(PREFS_KEY, value);
+    } catch {
+      /* not remembered; fine */
+    }
+  });
+
+  $effect(() => {
+    data.version;
+    load(api.trpgEntries(), []).then((e) => (entries = e));
+  });
+
+  /** ㄱ–ㅎ for Korean titles, A–Z for the rest; "Scenario 2" before "Scenario 10". */
+  const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
+  const byTitle = (a: TrpgEntry, b: TrpgEntry) => collator.compare(a.title, b.title);
+  const byDate = (a: TrpgEntry, b: TrpgEntry) => (b.date ?? '').localeCompare(a.date ?? '') || b.created_at - a.created_at;
+
+  const matching = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter((e) => [e.title, e.writer, e.system, e.memo].some((s) => s.toLowerCase().includes(q)));
+  });
+  const of = (kind: TrpgKind) => matching.filter((e) => e.kind === kind);
+
+  const wishlist = $derived(
+    of('wishlist').sort(sort === 'title' ? byTitle : (a, b) => b.created_at - a.created_at),
+  );
+  const played = $derived(of('played'));
+  /** Played sessions by year, newest year first; undated ones last. */
+  const playedByYear = $derived.by(() => {
+    const groups = new Map<string, TrpgEntry[]>();
+    for (const e of played) {
+      const year = e.date?.slice(0, 4) ?? '';
+      groups.set(year, [...(groups.get(year) ?? []), e]);
+    }
+    return [...groups.entries()]
+      .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : b.localeCompare(a)))
+      .map(([year, list]) => [year, list.sort(sort === 'title' ? byTitle : byDate)] as const);
+  });
+  const books = $derived(tab === 'rulebook' || tab === 'scenario_book' ? of(tab).sort(byTitle) : []);
+  /** Rule systems used so far, offered as suggestions in the editor. */
+  const systems = $derived([...new Set(entries.map((e) => e.system).filter(Boolean))].sort(collator.compare));
+
+  function toggleYear(year: string) {
+    collapsed = collapsed.includes(year) ? collapsed.filter((y) => y !== year) : [...collapsed, year];
+  }
+
+  function blank(kind: TrpgKind): TrpgEntry {
+    return {
+      id: 0, kind, title: '', writer: '', system: '', links: [], image: null,
+      date: kind === 'played' ? today() : null, role: '', memo: '', created_at: 0,
+    };
+  }
+
+  function edit(e: TrpgEntry) {
+    error = '';
+    newLink = '';
+    editing = { ...e, links: [...e.links] };
+  }
+
+  /** Moves a wished-for scenario to the played list, dated today. */
+  function markPlayed(e: TrpgEntry) {
+    edit({ ...e, kind: 'played', date: e.date ?? today() });
+  }
+
+  /** "example.com/x" → "https://example.com/x"; links with a scheme are kept. */
+  const normalizeLink = (s: string) => {
+    const link = s.trim();
+    return link && !/^[a-z][a-z0-9+.-]*:/i.test(link) ? `https://${link}` : link;
+  };
+
+  function addLink() {
+    if (!editing || !newLink.trim()) return;
+    editing.links = [...editing.links, normalizeLink(newLink)];
+    newLink = '';
+  }
+
+  /** Closing without saving: drop a cover that was uploaded but not kept. */
+  function cancel() {
+    const uploaded = editing?.image && editing.image !== entries.find((x) => x.id === editing?.id)?.image;
+    editing = null;
+    if (uploaded) api.removeUnusedImages().catch(() => {});
+  }
+
+  async function save() {
+    if (!editing) return;
+    if (!editing.title.trim()) return (error = t('trpg.needTitle'));
+    // A link typed but not added yet still counts.
+    const links = [...editing.links, ...(newLink.trim() ? [normalizeLink(newLink)] : [])];
+    const entry: TrpgEntry = {
+      ...editing,
+      links,
+      // Only played sessions keep a date and a role; only books keep a cover.
+      date: editing.kind === 'played' ? editing.date : null,
+      role: editing.kind === 'played' ? editing.role : '',
+      image: isBook(editing.kind) ? editing.image : null,
+    };
+    const ok = await mutate(api.saveTrpgEntry(entry), editing.id ? t('trpg.saved') : t('trpg.added'));
+    if (ok !== undefined) {
+      if (isBook(entry.kind)) tab = entry.kind as Tab;
+      editing = null;
+    }
+  }
+
+  async function remove(e: TrpgEntry) {
+    editing = null;
+    try {
+      const stored = await api.deleteTrpgEntry(e.id);
+      data.version++;
+      toast(t('clip.deleted', { name: e.title }), 'info', {
+        label: t('common.undo'),
+        run: () => stored && mutate(api.saveTrpgEntry({ ...stored, id: 0 }), t('trpg.saved')),
+      });
+    } catch (err) {
+      toast(String(err), 'error');
+    }
+  }
+
+  function open(link: string) {
+    openUrl(link).catch((err) => toast(String(err), 'error'));
+  }
+
+  const linkItems = (e: TrpgEntry): MenuItem[] => e.links.map((l) => ({ label: l, icon: ExternalLink, action: () => open(l) }));
+
+  /** One link opens directly; several open a menu to pick from. */
+  function openLinks(ev: MouseEvent, e: TrpgEntry) {
+    if (e.links.length === 1) open(e.links[0]);
+    else openMenu(ev, linkItems(e));
+  }
+
+  function entryMenu(ev: MouseEvent, e: TrpgEntry) {
+    const links = linkItems(e);
+    openMenu(ev, [
+      { label: t('common.edit'), icon: Pencil, action: () => edit(e) },
+      ...(e.kind === 'wishlist' ? [{ label: t('trpg.markPlayed'), icon: Swords, action: () => markPlayed(e) }] : []),
+      ...(links.length ? ['separator' as const, ...links] : []),
+      'separator',
+      { label: t('common.delete'), icon: Trash, danger: true, action: () => remove(e) },
+    ]);
+  }
+</script>
+
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>{t('nav.trpg')}</h1>
+      <p class="sub">{t('trpg.subtitle')}</p>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <div class="segmented tabs">
+      {#each TABS as x (x.id)}
+        <button class:active={tab === x.id} onclick={() => (tab = x.id)}><x.icon size={15} /> {t(x.label)}</button>
+      {/each}
+    </div>
+    <span class="spacer"></span>
+    {#if tab !== 'report'}
+      {#if tab === 'sessions'}
+        <div class="segmented">
+          <button class:active={sort === 'date'} onclick={() => (sort = 'date')}>{t('trpg.sortDate')}</button>
+          <button class:active={sort === 'title'} onclick={() => (sort = 'title')}>{t('trpg.sortTitle')}</button>
+        </div>
+      {/if}
+      <label class="search">
+        <Search size={15} />
+        <input class="input" placeholder={t('trpg.search')} bind:value={query} />
+      </label>
+      {#if tab !== 'sessions'}
+        <button class="btn primary" onclick={() => edit(blank(tab as TrpgKind))}><Plus size={16} /> {t(`trpg.add.${tab as 'rulebook' | 'scenario_book'}`)}</button>
+      {/if}
+    {/if}
+  </div>
+
+  {#if tab === 'sessions'}
+    <div class="columns">
+      <section class="card column" style:--c="#f2668b">
+        <div class="col-head">
+          <span class="col-icon"><Sparkles size={16} /></span>
+          <h3>{t('trpg.wishlist')}</h3>
+          <span class="count">{wishlist.length}</span>
+          <span class="spacer"></span>
+          <button class="icon-btn" onclick={() => edit(blank('wishlist'))} title={t('trpg.add.wishlist')} aria-label={t('trpg.add.wishlist')}><Plus size={17} /></button>
+        </div>
+        {#each wishlist as e (e.id)}{@render session(e)}{:else}{@render empty('wishlist')}{/each}
+      </section>
+
+      <section class="card column" style:--c="#7c74ff">
+        <div class="col-head">
+          <span class="col-icon"><ScrollText size={16} /></span>
+          <h3>{t('trpg.played')}</h3>
+          <span class="count">{played.length}</span>
+          <span class="spacer"></span>
+          <button class="icon-btn" onclick={() => edit(blank('played'))} title={t('trpg.add.played')} aria-label={t('trpg.add.played')}><Plus size={17} /></button>
+        </div>
+        {#each playedByYear as [year, list] (year)}
+          {@const expanded = !collapsed.includes(year)}
+          <button class="year-head" onclick={() => toggleYear(year)} aria-expanded={expanded}>
+            <span class="chev" class:closed={!expanded}><ChevronDown size={15} /></span>
+            <span class="strong">{year ? t('trpg.year', { year }) : t('trpg.noDate')}</span>
+            <span class="spacer"></span>
+            <span class="muted small">{t('trpg.times', { n: list.length })}</span>
+          </button>
+          {#if expanded}
+            {#each list as e (e.id)}{@render session(e)}{/each}
+          {/if}
+        {:else}
+          {@render empty('played')}
+        {/each}
+      </section>
+    </div>
+  {:else if tab === 'report'}
+    <TrpgReport {entries} />
+  {:else}
+    <div class="card shelf-card">
+      {#if books.length}
+        <div class="shelf">
+          {#each books as b (b.id)}
+            <button class="book" style:--c={bookColor(b.title)} onclick={() => edit(b)} oncontextmenu={(ev) => entryMenu(ev, b)} title={b.title}>
+              <span class="cover" class:photo={!!b.image}>
+                {#if b.image}
+                  <img src={imageUrl(b.image, 'trpg-book')} alt="" draggable="false" />
+                {:else}
+                  <span class="cover-title">{b.title}</span>
+                  {#if b.writer}<span class="cover-writer truncate">{b.writer}</span>{/if}
+                {/if}
+              </span>
+              <span class="caption">
+                <span class="caption-title">{b.title}</span>
+                <span class="faint small truncate">{[b.system, b.writer].filter(Boolean).join(' · ')}</span>
+              </span>
+            </button>
+          {/each}
+        </div>
+      {:else}
+        {@render empty(tab as TrpgKind)}
+      {/if}
+    </div>
+  {/if}
+</div>
+
+{#snippet session(e: TrpgEntry)}
+  <div class="entry" oncontextmenu={(ev) => entryMenu(ev, e)} role="listitem">
+    <button class="entry-main" onclick={() => edit(e)}>
+      {#if e.kind === 'played'}
+        <span class="when tabular">{e.date ? fmt(e.date, { month: '2-digit', day: '2-digit' }) : '—'}</span>
+      {/if}
+      <span class="entry-text">
+        <span class="entry-title truncate">{e.title}</span>
+        {#if e.writer || e.system}<span class="muted small truncate">{[e.writer, e.system].filter(Boolean).join(' · ')}</span>{/if}
+      </span>
+      {#if e.role}<span class="role {e.role}">{e.role.toUpperCase()}</span>{/if}
+    </button>
+    {#if e.kind === 'wishlist'}
+      <button class="icon-btn" onclick={() => markPlayed(e)} title={t('trpg.markPlayedHint')} aria-label={t('trpg.markPlayed')}><Swords size={15} /></button>
+    {/if}
+    {#if e.links.length}
+      <button class="icon-btn links" onclick={(ev) => openLinks(ev, e)} title={e.links.join('\n')} aria-label={t('trpg.openLink')}>
+        <ExternalLink size={15} />{#if e.links.length > 1}<span class="link-count">{e.links.length}</span>{/if}
+      </button>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet empty(kind: TrpgKind)}
+  <div class="empty small-empty">
+    {#if query.trim()}
+      <p>{t('trpg.noMatch')}</p>
+    {:else}
+      <p>{t(`trpg.empty.${kind}`)}</p>
+      <button class="btn small" onclick={() => edit(blank(kind))}><Plus size={14} /> {t(`trpg.add.${kind}`)}</button>
+    {/if}
+  </div>
+{/snippet}
+
+{#if editing}
+  <Modal title={editing.id ? t('trpg.edit') : t(`trpg.add.${editing.kind}`)} onclose={cancel} width={520}>
+    <div class="field">
+      <span class="label">{t('trpg.list')}</span>
+      <div class="segmented kind-pick">
+        {#each (isBook(editing.kind) ? ['rulebook', 'scenario_book'] : ['wishlist', 'played']) as TrpgKind[] as k (k)}
+          <button type="button" class:active={editing.kind === k} onclick={() => editing && (editing.kind = k)}>{t(`trpg.kind.${k}`)}</button>
+        {/each}
+      </div>
+    </div>
+    <div class="field">
+      <label for="trpg-title">{t('trpg.title')}</label>
+      <!-- svelte-ignore a11y_autofocus -->
+      <input id="trpg-title" class="input" placeholder={t(isBook(editing.kind) ? 'trpg.bookPlaceholder' : 'trpg.titlePlaceholder')}
+        bind:value={editing.title} autofocus onkeydown={(e) => e.key === 'Enter' && save()} />
+    </div>
+    <div class="two">
+      <div class="field">
+        <label for="trpg-writer">{isBook(editing.kind) ? t('trpg.author') : t('trpg.writer')}</label>
+        <input id="trpg-writer" class="input" bind:value={editing.writer} />
+      </div>
+      <div class="field">
+        <label for="trpg-system">{t('trpg.system')}</label>
+        <input id="trpg-system" class="input" list="trpg-systems" placeholder={t('trpg.systemPlaceholder')} bind:value={editing.system} />
+        <datalist id="trpg-systems">{#each systems as s (s)}<option value={s}></option>{/each}</datalist>
+      </div>
+    </div>
+    {#if editing.kind === 'played'}
+      <div class="two">
+        <div class="field">
+          <label for="trpg-date">{t('trpg.date')}</label>
+          <DateField id="trpg-date" value={editing.date} clearable onchange={(v) => editing && (editing.date = v)} />
+        </div>
+        <div class="field">
+          <span class="label">{t('trpg.role')}</span>
+          <div class="segmented">
+            {#each [['', t('trpg.roleNone')], ['gm', 'GM'], ['pl', 'PL']] as [id, label] (id)}
+              <button type="button" class:active={editing.role === id} onclick={() => editing && (editing.role = id as TrpgEntry['role'])}>{label}</button>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+    {#if isBook(editing.kind)}
+      <div class="field">
+        <span class="label">{t('trpg.cover')}</span>
+        <ImagePicker bind:value={editing.image} />
+      </div>
+    {/if}
+    <div class="field">
+      <label for="trpg-link">{t('common.links')}</label>
+      {#each editing.links as link, i (i)}
+        <div class="link-row">
+          <Link size={14} />
+          <button class="link-text truncate" onclick={() => open(link)} title={link}>{link}</button>
+          <button class="icon-btn" onclick={() => editing?.links.splice(i, 1)} aria-label={t('event.removeLink')}><X size={14} /></button>
+        </div>
+      {/each}
+      <div class="row">
+        <input id="trpg-link" class="input" placeholder={t('trpg.linkPlaceholder')} bind:value={newLink}
+          onkeydown={(e) => e.key === 'Enter' && addLink()} />
+        <button class="btn" onclick={addLink} disabled={!newLink.trim()}><Plus size={16} /> {t('common.add')}</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="trpg-memo">{t('common.memo')}</label>
+      <textarea id="trpg-memo" class="textarea" rows="3" placeholder={t('trpg.memoPlaceholder')} bind:value={editing.memo}></textarea>
+    </div>
+    {#if error}<p class="error">{error}</p>{/if}
+    {#snippet footer()}
+      {#if editing?.id}<ConfirmButton onconfirm={() => editing && remove(editing)} />{/if}
+      <span class="spacer"></span>
+      <button class="btn ghost" onclick={cancel}>{t('common.cancel')}</button>
+      <button class="btn primary" onclick={save}>{editing?.id ? t('common.save') : t('common.add')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
+<style>
+  .toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .tabs button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 220px;
+    color: var(--faint);
+  }
+  .search .input {
+    height: 34px;
+  }
+
+  /* ---- sessions */
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .col-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .col-icon {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    color: var(--c);
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+  }
+  .count {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--c);
+    background: color-mix(in srgb, var(--c) 12%, transparent);
+  }
+  .year-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 12px 6px 6px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  .chev {
+    display: grid;
+    color: var(--muted);
+    transition: transform 0.15s;
+  }
+  .chev.closed {
+    transform: rotate(-90deg);
+  }
+  .entry {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    border-radius: 12px;
+  }
+  .entry:hover {
+    background: var(--surface-2);
+  }
+  .entry-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 8px 6px;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  .entry > .icon-btn:last-child {
+    margin-right: 4px;
+  }
+  .when {
+    flex: none;
+    width: 52px;
+    padding: 6px 0;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c);
+    background: color-mix(in srgb, var(--c) 12%, transparent);
+  }
+  .entry-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .entry-title {
+    font-weight: 650;
+  }
+  .role {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+  .role.gm {
+    color: var(--warning);
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+  }
+  .role.pl {
+    color: var(--success);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+  }
+  .links {
+    position: relative;
+  }
+  .link-count {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 15px;
+    color: var(--primary-text);
+    background: var(--primary);
+  }
+  .small-empty {
+    padding: 28px 12px;
+    gap: 8px;
+  }
+
+  /* ---- bookshelf: each row is a shelf; books stand on the plank, titles below it */
+  .shelf-card {
+    padding: 0;
+    overflow: hidden;
+  }
+  .shelf {
+    --cover-w: 124px;
+    --cover-h: 178px;
+    --top: 22px;
+    --plank: 12px;
+    --row: calc(var(--top) + var(--cover-h) + var(--plank) + 52px);
+    --plank-at: calc(var(--top) + var(--cover-h));
+    display: grid;
+    grid-template-columns: repeat(auto-fill, var(--cover-w));
+    grid-auto-rows: var(--row);
+    justify-content: space-evenly;
+    column-gap: 24px;
+    padding: 0 24px;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent var(--plank-at),
+      color-mix(in srgb, var(--muted) 30%, var(--surface-2)) var(--plank-at),
+      color-mix(in srgb, var(--muted) 22%, var(--surface-2)) calc(var(--plank-at) + var(--plank) - 3px),
+      color-mix(in srgb, var(--text) 18%, var(--surface)) calc(var(--plank-at) + var(--plank) - 3px),
+      color-mix(in srgb, var(--text) 18%, var(--surface)) calc(var(--plank-at) + var(--plank)),
+      transparent calc(var(--plank-at) + var(--plank)),
+      transparent var(--row)
+    );
+  }
+  .book {
+    display: flex;
+    flex-direction: column;
+    width: var(--cover-w);
+    padding: var(--top) 0 0;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  .cover {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: var(--cover-h);
+    padding: 16px 12px 12px 18px;
+    border-radius: 3px 8px 8px 3px;
+    overflow: hidden;
+    color: #fff;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 45%),
+      linear-gradient(to bottom, color-mix(in srgb, var(--c) 88%, #fff), color-mix(in srgb, var(--c) 82%, #000));
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: transform 0.18s;
+  }
+  /* The spine: a darker band and a crease on the left edge. */
+  .cover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.28) 0,
+      rgba(0, 0, 0, 0.12) 7px,
+      rgba(255, 255, 255, 0.22) 8px,
+      transparent 11px
+    );
+    pointer-events: none;
+  }
+  .cover.photo {
+    padding: 0;
+    background: var(--surface-3);
+  }
+  .cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .book:hover .cover {
+    transform: translateY(-6px);
+  }
+  .cover-title {
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.25;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+  .cover-writer {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.85;
+  }
+  .caption {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: calc(var(--plank) + 8px);
+    min-width: 0;
+  }
+  .caption-title {
+    font-size: 13px;
+    font-weight: 650;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ---- editor */
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .kind-pick {
+    align-self: flex-start;
+  }
+  .link-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+  }
+  .link-text {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: none;
+    color: var(--primary);
+    text-align: left;
+    cursor: pointer;
+  }
+  .error {
+    color: var(--danger);
+    font-weight: 600;
+  }
+  @container main (max-width: 820px) {
+    .columns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @container main (max-width: 560px) {
+    .two {
+      grid-template-columns: 1fr;
+    }
+    .search {
+      width: 100%;
+    }
+    .shelf {
+      --cover-w: 104px;
+      --cover-h: 150px;
+      column-gap: 16px;
+      padding: 0 12px;
+    }
+  }
+</style>

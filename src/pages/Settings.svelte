@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import {
-    AppWindow, Check, Database, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
+    AppWindow, ArrowDown, ArrowUp, Check, Database, GripVertical, PanelsTopLeft, RotateCcw, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
     Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
   } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
@@ -17,6 +17,7 @@
     type WindowSize,
   } from '../lib/window.svelte';
   import { shortcut } from '../lib/clipboard.svelte';
+  import { movePage, orderedPages, pagePrefs, resetPages, setPageVisible, visiblePages } from '../lib/pages.svelte';
 
   const LANGUAGES: { id: Locale; name: string; sample: string; badge: string }[] = [
     { id: 'ko', name: '한국어', sample: '안녕하세요! 오늘 일정을 확인해 볼까요?', badge: '가' },
@@ -61,6 +62,15 @@
 
   const run = (p: Promise<unknown>) => p.catch((e) => toast(String(e), 'error'));
 
+  // ---- pages: drag a row (or use the arrows) to reorder
+  let dragFrom = $state<number | null>(null);
+  let dragOver = $state<number | null>(null);
+
+  function dropPage(to: number) {
+    if (dragFrom !== null) movePage(dragFrom, to);
+    dragFrom = dragOver = null;
+  }
+
   // ---- backup / restore / reset
   let exporting = $state(false);
   let importing = $state<{ path: string; manifest: BackupManifest } | null>(null);
@@ -68,7 +78,7 @@
   let resetUnderstood = $state(false);
   let restarting = $state(false);
 
-  const COUNT_KEYS = ['events', 'todos', 'memos', 'ddays', 'bookmarks', 'expenses', 'images'] as const;
+  const COUNT_KEYS = ['events', 'todos', 'memos', 'ddays', 'bookmarks', 'expenses', 'trpg', 'images'] as const;
 
   async function doExport() {
     exporting = true;
@@ -227,6 +237,51 @@
 
     <section class="card">
       <div class="section-head">
+        <div class="icon"><PanelsTopLeft size={18} /></div>
+        <div>
+          <h2>{t('set.pages')}</h2>
+          <p class="muted small">{t('set.pagesBody')}</p>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn small ghost" onclick={resetPages}><RotateCcw size={14} /> {t('set.pagesReset')}</button>
+      </div>
+      <div class="page-list" role="list">
+        {#each orderedPages() as page, i (page.id)}
+          {@const shown = !pagePrefs.hidden.includes(page.id)}
+          <div
+            class="page-row"
+            class:off={!shown}
+            class:dragging={dragFrom === i}
+            class:drop-target={dragOver === i && dragFrom !== i}
+            draggable="true"
+            ondragstart={(e) => { dragFrom = i; e.dataTransfer?.setData('text/plain', page.id); }}
+            ondragover={(e) => { e.preventDefault(); dragOver = i; }}
+            ondrop={(e) => { e.preventDefault(); dropPage(i); }}
+            ondragend={() => (dragFrom = dragOver = null)}
+            role="listitem"
+          >
+            <span class="grip"><GripVertical size={16} /></span>
+            <span class="page-icon"><page.icon size={17} /></span>
+            <span class="page-name">{t(page.label)}</span>
+            {#if !shown}<span class="faint small">{t('set.pageHidden')}</span>{/if}
+            <span class="spacer"></span>
+            <button class="icon-btn" onclick={() => movePage(i, i - 1)} disabled={i === 0} aria-label={t('set.pageUp')} title={t('set.pageUp')}><ArrowUp size={15} /></button>
+            <button class="icon-btn" onclick={() => movePage(i, i + 1)} disabled={i === pagePrefs.order.length - 1} aria-label={t('set.pageDown')} title={t('set.pageDown')}><ArrowDown size={15} /></button>
+            <input
+              type="checkbox"
+              class="switch"
+              checked={shown}
+              disabled={shown && visiblePages().length <= 1}
+              onchange={(e) => setPageVisible(page.id, e.currentTarget.checked)}
+              aria-label={t('set.pageShow', { page: t(page.label) })}
+            />
+          </div>
+        {/each}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
         <div class="icon"><ZoomIn size={18} /></div>
         <div>
           <h2>{t('set.zoom')}</h2>
@@ -348,7 +403,7 @@
       <span class="label">{t('data.contains')}</span>
       <div class="counts">
         {#each COUNT_KEYS as key (key)}
-          <span class="chip">{t(`data.count.${key}`, { n: importing.manifest.counts[key] })}</span>
+          <span class="chip">{t(`data.count.${key}`, { n: importing.manifest.counts[key] ?? 0 })}</span>
         {/each}
       </div>
     </div>
@@ -691,6 +746,46 @@
   }
   .sub-label {
     margin: 4px 0 8px;
+  }
+  .page-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .page-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    border: 1.5px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    cursor: grab;
+    transition: opacity 0.15s, border-color 0.15s;
+  }
+  .page-row.off .page-icon,
+  .page-row.off .page-name {
+    opacity: 0.45;
+  }
+  .page-row.dragging {
+    opacity: 0.4;
+  }
+  .page-row.drop-target {
+    border-color: var(--primary);
+  }
+  .grip {
+    display: grid;
+    color: var(--faint);
+  }
+  .page-icon {
+    display: grid;
+    color: var(--primary);
+  }
+  .page-name {
+    font-weight: 650;
+  }
+  .page-row .switch {
+    margin-left: 6px;
   }
   .zooms {
     display: grid;

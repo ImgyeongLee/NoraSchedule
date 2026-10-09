@@ -1,14 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import {
-    Activity, Bookmark, CalendarDays, ChartColumn, CircleCheck, House, ListTodo, NotebookPen, PanelLeftClose, PanelLeftOpen,
-    Pause, Play, Settings as SettingsIcon, Sticker, Target, Timer, Wallet,
-  } from '@lucide/svelte';
+  import { CircleCheck, PanelLeftClose, PanelLeftOpen, Pause, Play, Settings as SettingsIcon, Sticker } from '@lucide/svelte';
   import { api, type TrackerStatus } from './lib/api';
   import { pomodoro, PHASES } from './lib/pomodoro.svelte';
-  import { initSidebar, initTheme, setSidebarCollapsed, toast, ui, type Page } from './lib/state.svelte';
-  import { initLocale, t, type Key } from './lib/i18n.svelte';
+  import { initSidebar, initTheme, setSidebarCollapsed, toast, ui } from './lib/state.svelte';
+  import { initLocale, t } from './lib/i18n.svelte';
+  import { initPages, visiblePages } from './lib/pages.svelte';
   import { trackState } from './lib/tracker';
   import { clipboard, isMac, pageTarget, pointer, shortcut } from './lib/clipboard.svelte';
   import ContextMenu from './components/ContextMenu.svelte';
@@ -30,20 +28,11 @@
   import Analytics from './pages/Analytics.svelte';
   import Bookmarks from './pages/Bookmarks.svelte';
   import Expenses from './pages/Expenses.svelte';
+  import Trpg from './pages/Trpg.svelte';
   import Settings from './pages/Settings.svelte';
 
-  const NAV: { id: Page; label: Key; icon: typeof CalendarDays }[] = [
-    { id: 'home', label: 'nav.home', icon: House },
-    { id: 'calendar', label: 'nav.calendar', icon: CalendarDays },
-    { id: 'ddays', label: 'nav.ddays', icon: Target },
-    { id: 'todos', label: 'nav.todos', icon: ListTodo },
-    { id: 'pomodoro', label: 'nav.pomodoro', icon: Timer },
-    { id: 'memos', label: 'nav.memos', icon: NotebookPen },
-    { id: 'bookmarks', label: 'nav.bookmarks', icon: Bookmark },
-    { id: 'expenses', label: 'nav.expenses', icon: Wallet },
-    { id: 'tracking', label: 'nav.tracking', icon: Activity },
-    { id: 'analytics', label: 'nav.analytics', icon: ChartColumn },
-  ];
+  /** Sidebar pages in the user's order, without the ones turned off in Settings. */
+  const NAV = $derived(visiblePages());
 
   /** Below this window width the sidebar shows icons only, whatever the user chose. */
   const AUTO_COLLAPSE = 900;
@@ -57,6 +46,7 @@
     initTheme();
     initLocale();
     initSidebar();
+    initPages();
     initZoom();
     pomodoro.load();
     refreshTags();
@@ -143,7 +133,7 @@
       e.preventDefault();
       stepZoom(e.key === '-' ? -1 : 1);
     } else {
-      // ⌘1 … ⌘9 open the first nine pages, ⌘0 the tenth.
+      // ⌘1 … ⌘9 open the first nine visible pages, ⌘0 the tenth.
       const n = e.key === '0' ? 10 : Number(e.key);
       if (n >= 1 && n <= NAV.length) {
         e.preventDefault();
@@ -279,6 +269,7 @@
         {:else if ui.page === 'analytics'}<Analytics />
         {:else if ui.page === 'bookmarks'}<Bookmarks />
         {:else if ui.page === 'expenses'}<Expenses />
+        {:else if ui.page === 'trpg'}<Trpg />
         {:else}<Settings />{/if}
       </div>
     {/key}

@@ -9,6 +9,7 @@ mod images;
 mod recurrence;
 mod reminders;
 mod tracker;
+mod trpg;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -94,6 +95,9 @@ fn main() {
             commands::expenses_between,
             commands::save_expense,
             commands::delete_expense,
+            commands::trpg_entries,
+            commands::save_trpg_entry,
+            commands::delete_trpg_entry,
             commands::set_setting,
             commands::events_between,
             commands::save_event,

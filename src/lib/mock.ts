@@ -2,7 +2,7 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC } from '@tauri-apps/api/mocks';
-import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, MemoGroup, PomodoroSession, Tag, Todo, TodoGroup } from './api';
+import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, MemoGroup, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
@@ -134,6 +134,18 @@ export function installMock() {
       expenses.push({ id: 1000 + d * 10 + k, amount: base + ((d * 7 + k * 13) % 9) * 500, category: c, date: day, note: k === 0 && c === 'food' ? 'Lunch' : '' });
     }
   }
+  const trpg: TrpgEntry[] = [
+    { id: 2000, kind: 'rulebook', title: 'Call of Cthulhu 7th Edition', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 90 },
+    { id: 2001, kind: 'scenario_book', title: 'Doors to Darkness', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '5 starter scenarios', created_at: now - 86_400 * 60 },
+    { id: 2002, kind: 'played', title: 'COSMOS', writer: '노라', system: 'CoC 7th', links: ['https://example.com/cosmos', 'https://example.com/cosmos-log'], image: null, date: '2026-03-03', role: 'pl', memo: '', created_at: now - 86_400 * 200 },
+    { id: 2003, kind: 'played', title: 'The Haunting', writer: 'Sandy Petersen', system: 'CoC 7th', links: [], image: null, date: '2025-11-20', role: 'gm', memo: '', created_at: now - 86_400 * 300 },
+    { id: 2005, kind: 'played', title: '가면무도회', writer: '하루', system: 'CoC 7th', links: [], image: null, date: '2026-05-10', role: 'gm', memo: '', created_at: now - 86_400 * 150 },
+    { id: 2006, kind: 'played', title: '하늘의 노래', writer: '미도', system: 'Insane', links: ['https://example.com/sky'], image: null, date: '2025-07-01', role: 'pl', memo: '', created_at: now - 86_400 * 400 },
+    { id: 2007, kind: 'rulebook', title: '인세인', writer: '모험기획국', system: 'Insane', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 80 },
+    { id: 2008, kind: 'rulebook', title: 'Delta Green', writer: 'Arc Dream', system: 'Delta Green', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 70 },
+    { id: 2009, kind: 'wishlist', title: '달빛 아래', writer: '노라', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 3 },
+    { id: 2004, kind: 'wishlist', title: 'Masks of Nyarlathotep', writer: 'Larry DiTillio', system: 'CoC 7th', links: ['https://example.com/masks'], image: null, date: null, role: '', memo: 'Long campaign', created_at: now - 86_400 * 10 },
+  ];
   const settings: Record<string, string> = { 'expense.currency': 'KRW', 'expense.budget': '1200000' };
   let tracker = { paused: false, idle_threshold_secs: 300, tracked_apps: ['Code', 'Google Chrome'] };
 
@@ -273,12 +285,18 @@ export function installMock() {
         expenses.push({ ...a.expense, id: nextId }); return nextId++;
       }
       case 'delete_expense': { const i = expenses.findIndex((e) => e.id === a.id); return i < 0 ? null : expenses.splice(i, 1)[0]; }
+      case 'trpg_entries': return [...trpg].sort((x, y) => x.kind.localeCompare(y.kind) || (y.date ?? '').localeCompare(x.date ?? '') || y.created_at - x.created_at);
+      case 'save_trpg_entry': {
+        if (a.entry.id) { Object.assign(trpg.find((e) => e.id === a.entry.id)!, a.entry); return a.entry.id; }
+        trpg.push({ ...a.entry, id: nextId, created_at: a.entry.created_at || now }); return nextId++;
+      }
+      case 'delete_trpg_entry': { const i = trpg.findIndex((e) => e.id === a.id); return i < 0 ? null : trpg.splice(i, 1)[0]; }
       case 'plugin:dialog|save': return '/Users/you/Documents/Nora-backup.nora';
       case 'plugin:dialog|open': return '/Users/you/Documents/Nora-backup.nora';
       case 'export_data':
       case 'inspect_backup':
         return { format: 1, app_version: '0.1.0', exported_at: now - 86_400 * 3,
-          counts: { events: events.length, todos: todos.length, memos: memos.length, ddays: ddays.length, bookmarks: bookmarks.length, expenses: expenses.length, images: 2 } };
+          counts: { events: events.length, todos: todos.length, memos: memos.length, ddays: ddays.length, bookmarks: bookmarks.length, expenses: expenses.length, trpg: trpg.length, images: 2 } };
       case 'import_data':
       case 'reset_all_data':
         return null;
