@@ -115,23 +115,25 @@
 </script>
 
 <div class="calendar">
-  <div class="main">
-    <header>
-      <h1 class="title">{title}</h1>
-      <div class="nav">
-        <button class="icon-btn" onclick={() => step(-1)} aria-label={t('common.previous')}><ChevronLeft size={18} /></button>
-        <button class="btn small" onclick={() => (cursor = today())}>{t('common.today')}</button>
-        <button class="icon-btn" onclick={() => step(1)} aria-label={t('common.next')}><ChevronRight size={18} /></button>
-      </div>
-      <span class="spacer"></span>
-      <div class="segmented">
-        {#each [['month', t('cal.month')], ['week', t('cal.week')], ['day', t('cal.day')]] as [v, label] (v)}
-          <button class:active={view === v} onclick={() => (view = v as View)}>{label}</button>
-        {/each}
-      </div>
-      <button class="btn primary" onclick={() => newEvent(cursor)}><CalendarPlus size={17} /> {t('cal.new')}</button>
-    </header>
+  <header>
+    <h1 class="title">{title}</h1>
+    <div class="nav">
+      <button class="icon-btn" onclick={() => step(-1)} aria-label={t('common.previous')}><ChevronLeft size={18} /></button>
+      <button class="btn small" onclick={() => (cursor = today())}>{t('common.today')}</button>
+      <button class="icon-btn" onclick={() => step(1)} aria-label={t('common.next')}><ChevronRight size={18} /></button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn primary" onclick={() => newEvent(cursor)}><CalendarPlus size={17} /> {t('cal.new')}</button>
+  </header>
 
+  <!-- Sits above the side calendar, so the big calendar and the side column start at the same height. -->
+  <div class="segmented views">
+    {#each [['month', t('cal.month')], ['week', t('cal.week')], ['day', t('cal.day')]] as [v, label] (v)}
+      <button class:active={view === v} onclick={() => (view = v as View)}>{label}</button>
+    {/each}
+  </div>
+
+  <div class="main">
     <div class="view">
       {#if view === 'month'}
         <MonthView {cursor} events={shownEvents} {ddays} {todos} onopen={(e) => (editing = e)} onnew={(d) => newEvent(d)} onday={openDay} onselect={(d) => (cursor = d)} onrange={(a, b) => newRange(a, b)} />
@@ -251,22 +253,36 @@
     --gap: 16px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 270px;
+    /* Top row: title bar | view switcher. Bottom row: calendar | side column (same top edge). */
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'head views'
+      'main side';
     gap: var(--gap);
     height: 100%;
     padding: 28px 24px 20px 28px;
   }
   .main {
+    grid-area: main;
     display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0;
   }
   header {
+    grid-area: head;
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 16px;
     min-width: 0;
+  }
+  .views {
+    grid-area: views;
+    align-self: center;
+  }
+  .views button {
+    flex: 1;
+    justify-content: center;
   }
   .title {
     font-size: 22px;
@@ -289,6 +305,7 @@
     text-align: center;
   }
   .side {
+    grid-area: side;
     display: flex;
     flex-direction: column;
     gap: var(--gap);
@@ -433,8 +450,12 @@
     font-size: 12.5px;
   }
   @container main (max-width: 940px) {
+    /* No side column: the view switcher moves up next to the title bar. */
     .calendar {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        'head views'
+        'main main';
     }
     .side {
       display: none;
