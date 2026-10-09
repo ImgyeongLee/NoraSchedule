@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS trpg_entries (
     date       TEXT,
     role       TEXT    NOT NULL DEFAULT '',
     memo       TEXT    NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    pair       TEXT    NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS books (
@@ -501,6 +502,12 @@ fn migrate(conn: &Connection) -> DbResult<()> {
              ALTER TABLE trpg_entries ADD COLUMN image TEXT;
              UPDATE trpg_entries SET links = link;",
         )?;
+    }
+    let has_trpg_pair = conn
+        .prepare("SELECT 1 FROM pragma_table_info('trpg_entries') WHERE name = 'pair'")?
+        .exists([])?;
+    if !has_trpg_pair {
+        conn.execute_batch("ALTER TABLE trpg_entries ADD COLUMN pair TEXT NOT NULL DEFAULT ''")?;
     }
     let has_tags = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'tags'")?

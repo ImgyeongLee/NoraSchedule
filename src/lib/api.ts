@@ -147,6 +147,8 @@ export interface TrpgEntry {
   date: DateStr | null;
   /** Played as game master or player; '' when not recorded. */
   role: '' | 'gm' | 'pl';
+  /** The characters who played it together, e.g. "Alice & Bob" (`played` entries); '' for none. */
+  pair: string;
   memo: string;
   created_at: number;
 }

@@ -16,6 +16,7 @@
   import { fmt, today } from '../lib/dates';
   import { t, type Key } from '../lib/i18n.svelte';
   import { openMenu, type MenuItem } from '../lib/menu.svelte';
+  import { hideHoverCard, showNoteCard } from '../lib/hovercard.svelte';
   import { data, load, mutate, toast } from '../lib/state.svelte';
 
   type Tab = 'sessions' | 'rulebook' | 'scenario_book' | 'report';
@@ -32,7 +33,9 @@
 
   // Per-viewer conveniences, remembered in this browser only.
   const PREFS_KEY = 'nora.trpg';
-  function readPrefs(): { tab?: Tab; sort?: Sort; collapsed?: string[] } {
+  /** How the Played column is grouped: by year, or by character pair. */
+  type PlayedGroup = 'date' | 'pair';
+  function readPrefs(): { tab?: Tab; sort?: Sort; collapsed?: string[]; playedGroup?: PlayedGroup } {
     try {
       return JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') ?? {};
     } catch {
@@ -44,15 +47,16 @@
   let entries = $state<TrpgEntry[]>([]);
   let tab = $state<Tab>(TABS.some((x) => x.id === prefs.tab) ? prefs.tab! : 'sessions');
   let sort = $state<Sort>(prefs.sort === 'title' ? 'title' : 'date');
-  /** Years folded away in the Played column. */
+  /** Groups folded away in the Played column (years, or "pair:<name>"). */
   let collapsed = $state<string[]>(Array.isArray(prefs.collapsed) ? prefs.collapsed : []);
+  let playedGroup = $state<PlayedGroup>(prefs.playedGroup === 'pair' ? 'pair' : 'date');
   let query = $state('');
   let editing = $state<TrpgEntry | null>(null);
   let newLink = $state('');
   let error = $state('');
 
   $effect(() => {
-    const value = JSON.stringify({ tab, sort, collapsed });
+    const value = JSON.stringify({ tab, sort, collapsed, playedGroup });
     try {
       localStorage.setItem(PREFS_KEY, value);
     } catch {
@@ -92,6 +96,25 @@
       .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : b.localeCompare(a)))
       .map(([year, list]) => [year, list.sort(sort === 'title' ? byTitle : byDate)] as const);
   });
+  /** Played sessions by character pair, the most played pair first; sessions without one last ("Other"). */
+  const playedByPair = $derived.by(() => {
+    const groups = new Map<string, TrpgEntry[]>();
+    for (const e of played) {
+      const pair = e.pair.trim();
+      groups.set(pair, [...(groups.get(pair) ?? []), e]);
+    }
+    return [...groups.entries()]
+      .sort(([a, la], [b, lb]) => (a === '' ? 1 : b === '' ? -1 : lb.length - la.length || collator.compare(a, b)))
+      .map(([pair, list]) => [pair, list.sort(sort === 'title' ? byTitle : byDate)] as const);
+  });
+  /** The Played column's groups for the chosen grouping. */
+  const playedGroups = $derived(
+    playedGroup === 'pair'
+      ? playedByPair.map(([pair, list]) => ({ key: `pair:${pair}`, label: pair || t('trpg.pairOther'), list }))
+      : playedByYear.map(([year, list]) => ({ key: year, label: year ? t('trpg.year', { year }) : t('trpg.noDate'), list })),
+  );
+  /** Character pairs used so far, offered as suggestions in the editor. */
+  const pairs = $derived([...new Set(entries.map((e) => e.pair.trim()).filter(Boolean))].sort(collator.compare));
   const books = $derived(tab === 'rulebook' || tab === 'scenario_book' ? of(tab).sort(byTitle) : []);
   /** Rule systems used so far, offered as suggestions in the editor. */
   const systems = $derived([...new Set(entries.map((e) => e.system).filter(Boolean))].sort(collator.compare));
@@ -103,9 +126,15 @@
   function blank(kind: TrpgKind): TrpgEntry {
     return {
       id: 0, kind, title: '', writer: '', system: '', links: [], image: null,
-      date: kind === 'played' ? today() : null, role: '', memo: '', created_at: 0,
+      date: kind === 'played' ? today() : null, role: '', pair: '', memo: '', created_at: 0,
     };
   }
+
+  /** Details line for the memo hover card: date, writer, system and role. */
+  const noteMeta = (e: TrpgEntry) =>
+    [e.date && e.kind === 'played' ? fmt(e.date, { year: 'numeric', month: 'short', day: 'numeric' }) : '', e.pair, e.writer, e.system, e.role.toUpperCase()]
+      .filter(Boolean)
+      .join(' · ');
 
   function edit(e: TrpgEntry) {
     error = '';
@@ -148,6 +177,7 @@
       // Only played sessions keep a date and a role; only books keep a cover.
       date: editing.kind === 'played' ? editing.date : null,
       role: editing.kind === 'played' ? editing.role : '',
+      pair: editing.kind === 'played' ? editing.pair.trim() : '',
       image: isBook(editing.kind) ? editing.image : null,
     };
     const ok = await mutate(api.saveTrpgEntry(entry), editing.id ? t('trpg.saved') : t('trpg.added'));
@@ -247,13 +277,18 @@
           <h3>{t('trpg.played')}</h3>
           <span class="count">{played.length}</span>
           <span class="spacer"></span>
+          <div class="segmented small-seg" role="group" aria-label={t('trpg.groupBy')}>
+            <button class:active={playedGroup === 'date'} onclick={() => (playedGroup = 'date')}>{t('trpg.groupDate')}</button>
+            <button class:active={playedGroup === 'pair'} onclick={() => (playedGroup = 'pair')}>{t('trpg.groupPair')}</button>
+          </div>
           <button class="icon-btn" onclick={() => edit(blank('played'))} title={t('trpg.add.played')} aria-label={t('trpg.add.played')}><Plus size={17} /></button>
         </div>
-        {#each playedByYear as [year, list] (year)}
-          {@const expanded = !collapsed.includes(year)}
-          <button class="year-head" onclick={() => toggleYear(year)} aria-expanded={expanded}>
+        {#each playedGroups as group (group.key)}
+          {@const list = group.list}
+          {@const expanded = !collapsed.includes(group.key)}
+          <button class="year-head" onclick={() => toggleYear(group.key)} aria-expanded={expanded}>
             <span class="chev" class:closed={!expanded}><ChevronDown size={15} /></span>
-            <span class="strong">{year ? t('trpg.year', { year }) : t('trpg.noDate')}</span>
+            <span class="strong truncate">{group.label}</span>
             <span class="spacer"></span>
             <span class="muted small">{t('trpg.times', { n: list.length })}</span>
           </button>
@@ -284,7 +319,14 @@
 </div>
 
 {#snippet session(e: TrpgEntry)}
-  <div class="entry" oncontextmenu={(ev) => entryMenu(ev, e)} role="listitem">
+  <div
+    class="entry"
+    oncontextmenu={(ev) => { hideHoverCard(); entryMenu(ev, e); }}
+    onmouseenter={(ev) => showNoteCard(ev.currentTarget, { title: e.title, meta: noteMeta(e), memo: e.memo })}
+    onmouseleave={hideHoverCard}
+    onpointerdown={hideHoverCard}
+    role="listitem"
+  >
     <button class="entry-main" onclick={() => edit(e)}>
       {#if e.kind === 'played'}
         <span class="when tabular">{e.date ? fmt(e.date, { month: '2-digit', day: '2-digit' }) : '—'}</span>
@@ -358,6 +400,11 @@
             {/each}
           </div>
         </div>
+      </div>
+      <div class="field">
+        <label for="trpg-pair">{t('trpg.pair')}</label>
+        <input id="trpg-pair" class="input" list="trpg-pairs" placeholder={t('trpg.pairPlaceholder')} bind:value={editing.pair} />
+        <datalist id="trpg-pairs">{#each pairs as p (p)}<option value={p}></option>{/each}</datalist>
       </div>
     {/if}
     {#if isBook(editing.kind)}
@@ -448,6 +495,14 @@
     font-weight: 700;
     color: var(--c);
     background: color-mix(in srgb, var(--c) 12%, transparent);
+  }
+  .small-seg {
+    padding: 2px;
+  }
+  .small-seg button {
+    height: 24px;
+    padding: 0 9px;
+    font-size: 12px;
   }
   .year-head {
     display: flex;

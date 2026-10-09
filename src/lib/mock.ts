@@ -135,16 +135,16 @@ export function installMock() {
     }
   }
   const trpg: TrpgEntry[] = [
-    { id: 2000, kind: 'rulebook', title: 'Call of Cthulhu 7th Edition', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 90 },
-    { id: 2001, kind: 'scenario_book', title: 'Doors to Darkness', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '5 starter scenarios', created_at: now - 86_400 * 60 },
-    { id: 2002, kind: 'played', title: 'COSMOS', writer: '노라', system: 'CoC 7th', links: ['https://example.com/cosmos', 'https://example.com/cosmos-log'], image: null, date: '2026-03-03', role: 'pl', memo: '', created_at: now - 86_400 * 200 },
-    { id: 2003, kind: 'played', title: 'The Haunting', writer: 'Sandy Petersen', system: 'CoC 7th', links: [], image: null, date: '2025-11-20', role: 'gm', memo: '', created_at: now - 86_400 * 300 },
-    { id: 2005, kind: 'played', title: '가면무도회', writer: '하루', system: 'CoC 7th', links: [], image: null, date: '2026-05-10', role: 'gm', memo: '', created_at: now - 86_400 * 150 },
-    { id: 2006, kind: 'played', title: '하늘의 노래', writer: '미도', system: 'Insane', links: ['https://example.com/sky'], image: null, date: '2025-07-01', role: 'pl', memo: '', created_at: now - 86_400 * 400 },
-    { id: 2007, kind: 'rulebook', title: '인세인', writer: '모험기획국', system: 'Insane', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 80 },
-    { id: 2008, kind: 'rulebook', title: 'Delta Green', writer: 'Arc Dream', system: 'Delta Green', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 70 },
-    { id: 2009, kind: 'wishlist', title: '달빛 아래', writer: '노라', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 3 },
-    { id: 2004, kind: 'wishlist', title: 'Masks of Nyarlathotep', writer: 'Larry DiTillio', system: 'CoC 7th', links: ['https://example.com/masks'], image: null, date: null, role: '', memo: 'Long campaign', created_at: now - 86_400 * 10 },
+    { id: 2000, kind: 'rulebook', title: 'Call of Cthulhu 7th Edition', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', memo: '', created_at: now - 86_400 * 90 },
+    { id: 2001, kind: 'scenario_book', title: 'Doors to Darkness', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', memo: '5 starter scenarios', created_at: now - 86_400 * 60 },
+    { id: 2002, kind: 'played', title: 'COSMOS', writer: '노라', system: 'CoC 7th', links: ['https://example.com/cosmos', 'https://example.com/cosmos-log'], image: null, date: '2026-03-03', role: 'pl', pair: '하루 & 미도', memo: '', created_at: now - 86_400 * 200 },
+    { id: 2003, kind: 'played', title: 'The Haunting', writer: 'Sandy Petersen', system: 'CoC 7th', links: [], image: null, date: '2025-11-20', role: 'gm', pair: '', memo: '', created_at: now - 86_400 * 300 },
+    { id: 2005, kind: 'played', title: '가면무도회', writer: '하루', system: 'CoC 7th', links: [], image: null, date: '2026-05-10', role: 'gm', pair: '', memo: '', created_at: now - 86_400 * 150 },
+    { id: 2006, kind: 'played', title: '하늘의 노래', writer: '미도', system: 'Insane', links: ['https://example.com/sky'], image: null, date: '2025-07-01', role: 'pl', pair: '하루 & 미도', memo: '', created_at: now - 86_400 * 400 },
+    { id: 2007, kind: 'rulebook', title: '인세인', writer: '모험기획국', system: 'Insane', links: [], image: null, date: null, role: '', pair: '', memo: '', created_at: now - 86_400 * 80 },
+    { id: 2008, kind: 'rulebook', title: 'Delta Green', writer: 'Arc Dream', system: 'Delta Green', links: [], image: null, date: null, role: '', pair: '', memo: '', created_at: now - 86_400 * 70 },
+    { id: 2009, kind: 'wishlist', title: '달빛 아래', writer: '노라', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', memo: '', created_at: now - 86_400 * 3 },
+    { id: 2004, kind: 'wishlist', title: 'Masks of Nyarlathotep', writer: 'Larry DiTillio', system: 'CoC 7th', links: ['https://example.com/masks'], image: null, date: null, role: '', pair: '', memo: 'Long campaign', created_at: now - 86_400 * 10 },
   ];
   const book = (id: number, title: string, author: string, status: Book['status'], extra: Partial<Book> = {}): Book => ({
     id, title, author, publisher: '', status, image: null, total_pages: 0, current_page: 0, rating: 0,

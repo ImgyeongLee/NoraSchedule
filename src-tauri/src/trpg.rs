@@ -30,6 +30,9 @@ pub struct TrpgEntry {
     /// `gm`, `pl` or empty (`played` entries).
     #[serde(default)]
     pub role: String,
+    /// The characters who played it together, e.g. "Alice & Bob" (`played` entries).
+    #[serde(default)]
+    pub pair: String,
     #[serde(default)]
     pub memo: String,
     #[serde(default)]
@@ -41,7 +44,7 @@ impl TrpgEntry {
     pub const ROLES: [&'static str; 3] = ["", "gm", "pl"];
 }
 
-const COLUMNS: &str = "id, kind, title, writer, system, links, image, date, role, memo, created_at";
+const COLUMNS: &str = "id, kind, title, writer, system, links, image, date, role, memo, created_at, pair";
 
 /// Links are stored one per line, like event links.
 fn links_text(links: &[String]) -> String {
@@ -63,6 +66,7 @@ fn entry_from_row(r: &Row) -> DbResult<TrpgEntry> {
         role: r.get(8)?,
         memo: r.get(9)?,
         created_at: r.get(10)?,
+        pair: r.get(11)?,
     })
 }
 
@@ -80,16 +84,22 @@ impl Db {
         if e.id == 0 {
             let created = if e.created_at > 0 { e.created_at } else { now_ts() };
             self.conn.execute(
-                "INSERT INTO trpg_entries(kind, title, writer, system, links, image, date, role, memo, created_at)
-                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![e.kind, e.title, e.writer, e.system, links_text(&e.links), e.image, date, e.role, e.memo, created],
+                "INSERT INTO trpg_entries(kind, title, writer, system, links, image, date, role, memo, created_at, pair)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    e.kind, e.title, e.writer, e.system, links_text(&e.links), e.image, date, e.role, e.memo, created,
+                    e.pair.trim()
+                ],
             )?;
             Ok(self.conn.last_insert_rowid())
         } else {
             self.conn.execute(
-                "UPDATE trpg_entries SET kind=?1, title=?2, writer=?3, system=?4, links=?5, image=?6, date=?7, role=?8, memo=?9
-                 WHERE id=?10",
-                params![e.kind, e.title, e.writer, e.system, links_text(&e.links), e.image, date, e.role, e.memo, e.id],
+                "UPDATE trpg_entries SET kind=?1, title=?2, writer=?3, system=?4, links=?5, image=?6, date=?7, role=?8, memo=?9,
+                 pair=?10 WHERE id=?11",
+                params![
+                    e.kind, e.title, e.writer, e.system, links_text(&e.links), e.image, date, e.role, e.memo,
+                    e.pair.trim(), e.id
+                ],
             )?;
             Ok(e.id)
         }
@@ -122,6 +132,7 @@ mod tests {
             image: None,
             date: date.map(d),
             role: String::new(),
+            pair: String::new(),
             memo: String::new(),
             created_at: 0,
         }

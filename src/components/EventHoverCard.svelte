@@ -38,6 +38,13 @@
 {#if hoverCard.visible}
   <div class="card hover" style:left="{pos.left}px" style:top="{pos.top}px" style:width="{WIDTH}px" bind:offsetHeight={height} transition:fade={{ duration: 100 }}>
     {#if hoverCard.heading}<div class="heading">{hoverCard.heading}</div>{/if}
+    {#if hoverCard.note}
+      <div class="ev">
+        <div class="title-row"><span class="title">{hoverCard.note.title}</span></div>
+        {#if hoverCard.note.meta}<div class="meta flush">{hoverCard.note.meta}</div>{/if}
+        <p class="memo flush">{hoverCard.note.memo}</p>
+      </div>
+    {/if}
     {#each hoverCard.events.slice(0, 6) as e (`${e.id}-${e.occurrence}`)}
       {@const tags = tagsOf(e)}
       <div class="ev" style:--c={hex(eventColor(e))}>
@@ -126,6 +133,11 @@
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+  .meta.flush,
+  .memo.flush {
+    padding-left: 0;
+    margin-left: 0;
   }
   .tags {
     display: flex;
