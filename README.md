@@ -1,6 +1,6 @@
 # Nora Schedule
 
-일정, 할 일, 디데이, 메모, 독서·TRPG 기록, 집중 시간까지 한 곳에서 관리하는 가벼운 데스크톱 스케줄러입니다.
+일정, 할 일, 디데이, 메모, 식단·운동, 독서·TRPG 기록, 집중 시간까지 한 곳에서 관리하는 가벼운 데스크톱 스케줄러입니다.
 모든 데이터는 내 컴퓨터에만 저장돼요.
 
 ## 공지사항
@@ -11,21 +11,23 @@ Windows 10/11 그리고 macOS (Apple Silicon · M1 이후) 호환
 ## 주요 기능
 
 ### 한눈에 보기 (홈)
-- 위젯을 골라 배치하는 대시보드 (인사말, 오늘 일정, 달력, 할 일, 디데이, 뽀모도로, 작업 시간, 주간 차트, 메모, 북마크, 가계부 등)
+- 위젯을 골라 배치하는 대시보드 (인사말, 오늘 일정, 달력, 할 일, 디데이, 뽀모도로, 작업 시간, 주간 차트, 메모, 북마크, 가계부, 칼로리 등)
 - 위젯 크기 조절, 드래그로 순서 변경
 - 헤더 이미지와 꾸미기용 이미지 카드 (움직이는 GIF 가능, 드래그·확대로 보이는 부분 조절)
 - 달력 위젯에서 날짜에 마우스를 올리면 그날 일정 미리보기
 
 ### 캘린더
 - 월간 / 주간 / 일간 보기, 드래그로 일정 만들기
+- 일정을 끌어서 다른 날로 옮기기 (주간·일간 보기에서는 15분 단위로 시간도 이동, 되돌리기 가능)
 - 여러 날짜에 걸친 일정은 끊기지 않는 막대로 표시
 - 반복 일정 (매일·매주·매월·매년, 횟수/종료일 지정, "이 일정만 / 모든 일정" 수정)
 - 일정 완료 표시 (취소선으로 표시, 되돌리기 가능)
 - 태그 (색·카테고리 지정, 태그별 필터, 첫 번째 태그 색으로 일정 표시)
-- 사전 알림 (없음, 5분, 10분, 30분, 1시간, 사용자 지정) — 알림음과 Windows 알림
+- 사전 알림 (없음, 5분, 10분, 30분, 1시간, 사용자 지정) — 알림음과 시스템 알림
 - 일정에 마우스를 올리면 시간·장소·태그·메모 표시
 - 마감일이 있는 할 일도 캘린더에 함께 표시 (클릭해서 완료)
-- 복사·붙여넣기 (Ctrl+C / Ctrl+V), 우클릭 메뉴, 실행 취소
+- 복사·붙여넣기 (Ctrl+C / Ctrl+V, Mac은 ⌘), 우클릭 메뉴, 실행 취소
+- 종일 일정을 시간 일정 뒤에 보여 주는 옵션, 시간 선택 방식 고르기 (15분 단위 목록 / 오전·오후 + 시·분)
 
 ### 할 일
 - 그룹별 관리, 하위 할 일, 마감일·마감 시간
@@ -35,6 +37,12 @@ Windows 10/11 그리고 macOS (Apple Silicon · M1 이후) 호환
 - 카드 모양 (기본 / 가로형 / 세로형)
 - 매년 반복 (생일·기념일), 1일부터 세기 (사귄 날 = D+1)
 
+### 식단·운동
+- 먹은 것과 먹을 것(예정)을 아침·점심·저녁·간식별로 기록, 체크 한 번으로 '먹었어요' 처리
+- 하루 목표 칼로리 대비 남은 칼로리 (목표 − 먹은 것 + 운동 소모), 먹을 것까지 다 먹었을 때 남거나 넘치는 양
+- 운동 12종류와 운동 시간 기록, 체중을 바탕으로 소모 칼로리 자동 추정 (체중 × 운동 강도(MET) × 시간, 직접 입력도 가능)
+- 이번 주 7일 현황, 최근 먹은 음식 한 번에 다시 추가
+
 ### 독서
 - 읽는 중 / 읽고 싶은 책 / 다 읽은 책
 - 읽은 쪽수와 진행률, 시작한 날·다 읽은 날, 별점, 독후감
@@ -42,6 +50,7 @@ Windows 10/11 그리고 macOS (Apple Silicon · M1 이후) 호환
 
 ### TRPG
 - 플레이한 시나리오(세션) 기록과 하고 싶은 시나리오 목록
+- 플레이한 시나리오를 폴더로 정리 (예: CoC 타이만, CoC 다인), 역할 여러 개 선택 (GM·PL·HO1~5·PC1~5 또는 직접 입력)
 - 룰북·시나리오북 책장 (표지, 저자·출판사)
 - 분석 리포트: 월별·연도별 세션, 많이 한 룰, 많이 플레이한 작가
 
@@ -53,31 +62,32 @@ Windows 10/11 그리고 macOS (Apple Silicon · M1 이후) 호환
 - **뽀모도로** 타이머와 집중 기록
 - **작업 시간 추적**: 지정한 앱에서 보낸 시간만 기록, 자리 비움 감지, 앱·창 제목별 통계
 - **통계**: 집중 시간, 할 일 완료, 작업 시간 차트
-- **북마크**, **가계부**
+- **북마크** (폴더, 끌어서 순서 바꾸기), **가계부**
+- **오버레이 패널**: 바탕화면 위에 떠 있는 작은 위젯 패널 (모서리에 붙이기, 다른 창 위에 고정, 접기·펼치기, 로그인할 때 자동 실행)
 
 ### 꾸미기와 설정
 - 라이트 / 다크 / 시스템 테마, 색상 테마 프리셋과 직접 만들기 (메인 색, 보조 색, 배경 색감)
 - Windows 제목 표시줄 색이 테마를 따라감
 - 스티커: 내 이미지(투명 PNG, 움직이는 GIF 포함)를 아무 페이지에나 붙이고 옮기기·크기·회전 조절 (꾸미기 모드에서만 편집, 평소에는 클릭을 방해하지 않음)
-- 한국어 / English, Pretendard 글꼴
+- 한국어 / English / 日本語, Pretendard 글꼴 (일본어는 Noto Sans JP, 앱에 포함되어 오프라인에서도 표시)
 - 사이드바 페이지 순서 바꾸기·숨기기
 - 화면 배율 조절
 - 창 크기·위치 기억, 크기 프리셋
-- 전체 데이터 백업·복원 (이미지, 독서·TRPG 기록 포함), 초기화
+- 전체 데이터 백업·복원 (이미지, 식단·운동, 독서·TRPG 기록 포함), 초기화
 
 ## 기술 스택
 
 | 영역 | 사용 기술 |
 |---|---|
-| 앱 프레임워크 | [Tauri 2](https://tauri.app) (WebView2) |
+| 앱 프레임워크 | [Tauri 2](https://tauri.app) (Windows: WebView2, macOS: WKWebView) |
 | 백엔드 | Rust (edition 2024), SQLite ([rusqlite](https://github.com/rusqlite/rusqlite), 번들 빌드), chrono, serde, image, zip |
 | 프론트엔드 | [Svelte 5](https://svelte.dev) (runes), TypeScript, Vite |
 | 에디터 | [Tiptap 3](https://tiptap.dev) (Markdown 지원), marked, DOMPurify |
-| UI | Lucide 아이콘, Pretendard 글꼴, 직접 만든 CSS 디자인 시스템 |
-| Tauri 플러그인 | dialog, notification, opener, window-state |
+| UI | Lucide 아이콘, Pretendard·Noto Sans JP 글꼴, 직접 만든 CSS 디자인 시스템 |
+| Tauri 플러그인 | autostart, dialog, notification, opener, single-instance, window-state |
 | 작업 시간 추적 | active-win-pos-rs (현재 활성 창 읽기) |
 
-데이터는 OS의 앱 데이터 폴더(Windows: `%APPDATA%\com.nora.schedule`)에 SQLite 파일과 이미지 폴더로 저장돼요.
+데이터는 OS의 앱 데이터 폴더(Windows: `%APPDATA%\com.nora.schedule`, macOS: `~/Library/Application Support/com.nora.schedule`)에 SQLite 파일과 이미지 폴더로 저장돼요.
 
 ## 직접 빌드하기
 
@@ -85,6 +95,7 @@ Windows 10/11 그리고 macOS (Apple Silicon · M1 이후) 호환
 - Node.js 22.12 이상 (`.nvmrc` 참고)
 - Rust (rustup)
 - Windows: Microsoft C++ Build Tools, WebView2 (Windows 11에는 기본 포함)
+- macOS: Xcode Command Line Tools (`xcode-select --install`)
 
 ```sh
 npm install
@@ -92,7 +103,7 @@ npm run tauri dev      # 개발 모드로 실행
 npm run tauri build    # 설치 파일 만들기
 ```
 
-빌드 결과물은 `src-tauri/target/release/bundle/` 아래에 생겨요 (`nsis/…-setup.exe`, `msi/….msi`).
+빌드 결과물은 `src-tauri/target/release/bundle/` 아래에 생겨요 (Windows: `nsis/…-setup.exe`, `msi/….msi` · macOS: `macos/Nora Schedule.app`, `dmg/….dmg`).
 
 그 밖의 명령:
 
