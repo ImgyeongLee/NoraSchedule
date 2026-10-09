@@ -35,7 +35,7 @@ export async function loadExpenseSettings() {
     api.getSetting('expense.currency').catch(() => null),
     api.getSetting('expense.budget').catch(() => null),
   ]);
-  expenseSettings.currency = currency ?? (i18n.locale === 'ko' ? 'KRW' : 'USD');
+  expenseSettings.currency = currency ?? ({ ko: 'KRW', ja: 'JPY', en: 'USD' } as const)[i18n.locale];
   expenseSettings.budget = budget && Number(budget) > 0 ? Number(budget) : null;
   expenseSettings.loaded = true;
 }

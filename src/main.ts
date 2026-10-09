@@ -1,5 +1,7 @@
 import { mount } from 'svelte';
 import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+// Japanese text (bundled, split by character range so only the glyphs in use are loaded).
+import '@fontsource-variable/noto-sans-jp';
 import './app.css';
 import App from './App.svelte';
 import { ui, type Page } from './lib/state.svelte';

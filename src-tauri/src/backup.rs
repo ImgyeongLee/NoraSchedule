@@ -41,6 +41,11 @@ pub struct Counts {
     /// Missing in backups made before the reading log existed.
     #[serde(default)]
     pub books: u64,
+    /// Missing in backups made before the diet and exercise log existed.
+    #[serde(default)]
+    pub meals: u64,
+    #[serde(default)]
+    pub workouts: u64,
     pub images: u64,
 }
 
@@ -80,6 +85,8 @@ impl Db {
             expenses: count("expenses")?,
             trpg: count("trpg_entries")?,
             books: count("books")?,
+            meals: count("meals")?,
+            workouts: count("workouts")?,
             images: 0,
         })
     }

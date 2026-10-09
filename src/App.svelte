@@ -28,6 +28,7 @@
   import Analytics from './pages/Analytics.svelte';
   import Bookmarks from './pages/Bookmarks.svelte';
   import Expenses from './pages/Expenses.svelte';
+  import Health from './pages/Health.svelte';
   import Trpg from './pages/Trpg.svelte';
   import Reading from './pages/Reading.svelte';
   import Settings from './pages/Settings.svelte';
@@ -270,6 +271,7 @@
         {:else if ui.page === 'analytics'}<Analytics />
         {:else if ui.page === 'bookmarks'}<Bookmarks />
         {:else if ui.page === 'expenses'}<Expenses />
+        {:else if ui.page === 'health'}<Health />
         {:else if ui.page === 'trpg'}<Trpg />
         {:else if ui.page === 'reading'}<Reading />
         {:else}<Settings />{/if}

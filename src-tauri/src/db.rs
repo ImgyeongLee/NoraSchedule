@@ -165,6 +165,28 @@ CREATE TABLE IF NOT EXISTS books (
     created_at   INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS meals (
+    id         INTEGER PRIMARY KEY,
+    date       TEXT    NOT NULL,
+    slot       TEXT    NOT NULL,
+    name       TEXT    NOT NULL,
+    kcal       INTEGER NOT NULL DEFAULT 0,
+    eaten      INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(date);
+
+CREATE TABLE IF NOT EXISTS workouts (
+    id         INTEGER PRIMARY KEY,
+    date       TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    minutes    INTEGER NOT NULL,
+    kcal       INTEGER NOT NULL DEFAULT 0,
+    note       TEXT    NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -424,7 +446,7 @@ fn todo_from_row(r: &Row) -> DbResult<Todo> {
 }
 
 pub struct Db {
-    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs`, `trpg.rs` and `reading.rs`.
+    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs`, `health.rs`, `trpg.rs` and `reading.rs`.
     pub(crate) conn: Connection,
 }
 

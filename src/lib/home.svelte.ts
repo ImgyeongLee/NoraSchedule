@@ -1,7 +1,7 @@
 // Overview dashboard: which tiles are shown, in what order and size.
 import type { Component } from 'svelte';
 import {
-  Activity, Bookmark, CalendarCheck, CalendarDays, CalendarHeart, ChartColumn, Hand, ListTodo, NotebookPen, Target, Timer,
+  Activity, Bookmark, CalendarCheck, CalendarDays, CalendarHeart, ChartColumn, Hand, ListTodo, NotebookPen, Salad, Target, Timer,
   Image as ImageIcon, Trophy, Wallet,
 } from '@lucide/svelte';
 import { api } from './api';
@@ -11,7 +11,7 @@ import type { Key } from './i18n.svelte';
 export type TileSize = 'sm' | 'wide' | 'tall' | 'large';
 export type WidgetId =
   | 'greeting' | 'agenda' | 'calendar' | 'todos' | 'ddays' | 'dday' | 'pomodoro' | 'working' | 'weekChart' | 'progress'
-  | 'memos' | 'bookmarks' | 'expenses' | 'image';
+  | 'memos' | 'bookmarks' | 'expenses' | 'health' | 'image';
 
 export interface Tile {
   /** Unique per tile, so the same widget can appear more than once. */
@@ -41,6 +41,7 @@ export const WIDGETS: Record<WidgetId, { name: Key; desc: Key; icon: IconCompone
   memos: { name: 'w.memos', desc: 'w.memos.desc', icon: NotebookPen, defaultSize: 'sm' },
   bookmarks: { name: 'w.bookmarks', desc: 'w.bookmarks.desc', icon: Bookmark, defaultSize: 'tall' },
   expenses: { name: 'w.expenses', desc: 'w.expenses.desc', icon: Wallet, defaultSize: 'sm' },
+  health: { name: 'w.health', desc: 'w.health.desc', icon: Salad, defaultSize: 'sm' },
   image: { name: 'w.image', desc: 'w.image.desc', icon: ImageIcon, defaultSize: 'sm', multiple: true },
 };
 

@@ -17,6 +17,7 @@
   import DDayCardWidget from '../widgets/DDayCardWidget.svelte';
   import BookmarksWidget from '../widgets/BookmarksWidget.svelte';
   import ExpensesWidget from '../widgets/ExpensesWidget.svelte';
+  import HealthWidget from '../widgets/HealthWidget.svelte';
   import GreetingWidget from '../widgets/GreetingWidget.svelte';
   import AgendaWidget from '../widgets/AgendaWidget.svelte';
   import CalendarWidget from '../widgets/CalendarWidget.svelte';
@@ -35,6 +36,7 @@
     dday: DDayCardWidget,
     bookmarks: BookmarksWidget,
     expenses: ExpensesWidget,
+    health: HealthWidget,
     greeting: GreetingWidget,
     agenda: AgendaWidget,
     calendar: CalendarWidget,
