@@ -50,7 +50,7 @@
   type="button"
   class="date-field"
   class:open
-  class:empty={!value}
+  class:no-value={!value}
   aria-label={label}
   aria-haspopup="dialog"
   onclick={() => (open = !open)}
@@ -106,7 +106,7 @@
     background: var(--surface);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
   }
-  .date-field.empty .text {
+  .date-field.no-value .text {
     color: var(--faint);
   }
   .text {

@@ -29,6 +29,7 @@
   import Bookmarks from './pages/Bookmarks.svelte';
   import Expenses from './pages/Expenses.svelte';
   import Trpg from './pages/Trpg.svelte';
+  import Reading from './pages/Reading.svelte';
   import Settings from './pages/Settings.svelte';
 
   /** Sidebar pages in the user's order, without the ones turned off in Settings. */
@@ -270,6 +271,7 @@
         {:else if ui.page === 'bookmarks'}<Bookmarks />
         {:else if ui.page === 'expenses'}<Expenses />
         {:else if ui.page === 'trpg'}<Trpg />
+        {:else if ui.page === 'reading'}<Reading />
         {:else}<Settings />{/if}
       </div>
     {/key}

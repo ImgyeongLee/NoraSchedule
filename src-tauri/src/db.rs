@@ -148,6 +148,22 @@ CREATE TABLE IF NOT EXISTS trpg_entries (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS books (
+    id           INTEGER PRIMARY KEY,
+    title        TEXT    NOT NULL,
+    author       TEXT    NOT NULL DEFAULT '',
+    publisher    TEXT    NOT NULL DEFAULT '',
+    status       TEXT    NOT NULL,
+    image        TEXT,
+    total_pages  INTEGER NOT NULL DEFAULT 0,
+    current_page INTEGER NOT NULL DEFAULT 0,
+    rating       INTEGER NOT NULL DEFAULT 0,
+    started      TEXT,
+    finished     TEXT,
+    review       TEXT    NOT NULL DEFAULT '',
+    created_at   INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -407,7 +423,7 @@ fn todo_from_row(r: &Row) -> DbResult<Todo> {
 }
 
 pub struct Db {
-    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs` and `trpg.rs`.
+    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs`, `trpg.rs` and `reading.rs`.
     pub(crate) conn: Connection,
 }
 
@@ -757,7 +773,9 @@ impl Db {
     /// Image files still referenced by some D-Day.
     pub fn referenced_images(&self) -> DbResult<std::collections::HashSet<String>> {
         let mut st = self.conn.prepare(
-            "SELECT image FROM ddays WHERE image IS NOT NULL UNION SELECT image FROM trpg_entries WHERE image IS NOT NULL",
+            "SELECT image FROM ddays WHERE image IS NOT NULL
+             UNION SELECT image FROM trpg_entries WHERE image IS NOT NULL
+             UNION SELECT image FROM books WHERE image IS NOT NULL",
         )?;
         let mut names: std::collections::HashSet<String> = st.query_map([], |r| r.get(0))?.collect::<DbResult<_>>()?;
         // The Overview header, image cards and stickers live in JSON settings; keep every image they mention.

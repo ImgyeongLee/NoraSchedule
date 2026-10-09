@@ -151,11 +151,34 @@ export interface TrpgEntry {
   created_at: number;
 }
 
+export type BookStatus = 'want' | 'reading' | 'read';
+
+export interface Book {
+  id: number;
+  title: string;
+  author: string;
+  publisher: string;
+  status: BookStatus;
+  /** Cover image file name, see lib/images.ts. */
+  image: string | null;
+  /** 0 when unknown. */
+  total_pages: number;
+  /** The page read up to. */
+  current_page: number;
+  /** Half stars: 0 (not rated) to 10 (five stars). */
+  rating: number;
+  started: DateStr | null;
+  finished: DateStr | null;
+  /** Markdown. */
+  review: string;
+  created_at: number;
+}
+
 export interface BackupManifest {
   format: number;
   app_version: string;
   exported_at: number;
-  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; trpg?: number; images: number };
+  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; trpg?: number; books?: number; images: number };
 }
 
 export interface Memo {
@@ -272,6 +295,10 @@ export const api = {
   trpgEntries: () => invoke<TrpgEntry[]>('trpg_entries'),
   saveTrpgEntry: (entry: TrpgEntry) => invoke<number>('save_trpg_entry', { entry }),
   deleteTrpgEntry: (id: number) => invoke<TrpgEntry | null>('delete_trpg_entry', { id }),
+
+  books: () => invoke<Book[]>('books'),
+  saveBook: (book: Book) => invoke<number>('save_book', { book }),
+  deleteBook: (id: number) => invoke<Book | null>('delete_book', { id }),
 
   memos: () => invoke<Memo[]>('memos'),
   createMemo: (title: string, groupId: number | null = null) => invoke<number>('create_memo', { title, groupId }),

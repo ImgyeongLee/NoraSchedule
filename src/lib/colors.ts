@@ -23,6 +23,16 @@ export function colorForName(name: string): string {
   return hex(PALETTE[h % PALETTE.length].value);
 }
 
+/** Cloth-cover colors for books without a cover image (TRPG and Reading shelves). */
+const COVER_COLORS = ['#2f4a7a', '#7a2e3a', '#2f6b4f', '#b0812a', '#21757d', '#5b3f86', '#8a5a3c', '#3d4f63', '#a8466a'];
+
+/** A stable cover color for a book title. */
+export function coverColor(title: string): string {
+  let h = 0x811c9dc5;
+  for (const ch of title) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193) >>> 0;
+  return COVER_COLORS[h % COVER_COLORS.length];
+}
+
 /** Readable text color (dark or white) on a solid block of color `n`. */
 export function textOn(n: number): string {
   const r = (n >> 16) & 255;

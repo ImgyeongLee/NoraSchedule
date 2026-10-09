@@ -6,6 +6,7 @@ mod commands;
 mod db;
 mod expenses;
 mod images;
+mod reading;
 mod recurrence;
 mod reminders;
 mod tracker;
@@ -98,6 +99,9 @@ fn main() {
             commands::trpg_entries,
             commands::save_trpg_entry,
             commands::delete_trpg_entry,
+            commands::books,
+            commands::save_book,
+            commands::delete_book,
             commands::set_setting,
             commands::events_between,
             commands::save_event,

@@ -15,7 +15,7 @@
   import { t, type Key } from '../lib/i18n.svelte';
   import { isMac } from '../lib/clipboard.svelte';
 
-  let { value, onchange }: { value: string; onchange: (markdown: string) => void } = $props();
+  let { value, onchange, placeholder }: { value: string; onchange: (markdown: string) => void; placeholder?: string } = $props();
 
   let element: HTMLDivElement;
   let editor = $state<Editor | null>(null);
@@ -32,7 +32,7 @@
         TaskList,
         TaskItem.configure({ nested: true }),
         Markdown,
-        Placeholder.configure({ placeholder: () => t('memo.richPlaceholder') }),
+        Placeholder.configure({ placeholder: () => placeholder ?? t('memo.richPlaceholder') }),
       ],
       content: value,
       contentType: 'markdown',

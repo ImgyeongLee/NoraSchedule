@@ -11,6 +11,7 @@ use crate::bookmarks::{Bookmark, BookmarkFolder};
 use crate::expenses::Expense;
 use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, MemoGroup, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
+use crate::reading::Book;
 use crate::trpg::TrpgEntry;
 
 type CmdResult<T> = Result<T, String>;
@@ -393,6 +394,43 @@ pub fn save_trpg_entry(state: State<AppState>, entry: TrpgEntry) -> CmdResult<i6
 #[tauri::command]
 pub fn delete_trpg_entry(state: State<AppState>, id: i64) -> CmdResult<Option<TrpgEntry>> {
     with_db(&state, |db| db.delete_trpg_entry(id))
+}
+
+// ---- reading log ------------------------------------------------------------------
+
+#[tauri::command]
+pub fn books(state: State<AppState>) -> CmdResult<Vec<Book>> {
+    with_db(&state, |db| db.books())
+}
+
+#[tauri::command]
+pub fn save_book(state: State<AppState>, book: Book) -> CmdResult<i64> {
+    let title = book.title.trim();
+    if title.is_empty() {
+        return Err("title required".into());
+    }
+    if !Book::STATUSES.contains(&book.status.as_str()) {
+        return Err("invalid book".into());
+    }
+    let book = Book {
+        title: title.into(),
+        author: book.author.trim().into(),
+        publisher: book.publisher.trim().into(),
+        image: book.image.filter(|name| crate::images::is_safe_name(name)),
+        rating: book.rating.min(Book::MAX_RATING),
+        // Can't have read past the last page.
+        current_page: if book.total_pages > 0 { book.current_page.min(book.total_pages) } else { book.current_page },
+        ..book
+    };
+    let id = with_db(&state, |db| db.save_book(&book))?;
+    // A replaced or removed cover is no longer referenced: delete the file.
+    remove_unused_images(state)?;
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn delete_book(state: State<AppState>, id: i64) -> CmdResult<Option<Book>> {
+    with_db(&state, |db| db.delete_book(id))
 }
 
 // ---- expenses -------------------------------------------------------------------

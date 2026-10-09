@@ -2,7 +2,7 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC } from '@tauri-apps/api/mocks';
-import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, MemoGroup, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry } from './api';
+import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, MemoGroup, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
@@ -145,6 +145,20 @@ export function installMock() {
     { id: 2008, kind: 'rulebook', title: 'Delta Green', writer: 'Arc Dream', system: 'Delta Green', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 70 },
     { id: 2009, kind: 'wishlist', title: '달빛 아래', writer: '노라', system: 'CoC 7th', links: [], image: null, date: null, role: '', memo: '', created_at: now - 86_400 * 3 },
     { id: 2004, kind: 'wishlist', title: 'Masks of Nyarlathotep', writer: 'Larry DiTillio', system: 'CoC 7th', links: ['https://example.com/masks'], image: null, date: null, role: '', memo: 'Long campaign', created_at: now - 86_400 * 10 },
+  ];
+  const book = (id: number, title: string, author: string, status: Book['status'], extra: Partial<Book> = {}): Book => ({
+    id, title, author, publisher: '', status, image: null, total_pages: 0, current_page: 0, rating: 0,
+    started: null, finished: null, review: '', created_at: now - 86_400 * (100 - id + 3000), ...extra,
+  });
+  const books: Book[] = [
+    book(3000, '소년이 온다', '한강', 'reading', { total_pages: 216, current_page: 80, started: addDays(t, -7) }),
+    book(3001, 'Project Hail Mary', 'Andy Weir', 'reading', { total_pages: 496, current_page: 410, started: addDays(t, -20) }),
+    book(3002, '아몬드', '손원평', 'read', { total_pages: 264, current_page: 264, rating: 9, started: '2026-08-01', finished: '2026-08-12', review: '감정을 배우는 이야기.\n\n**곤이**가 오래 남는다.' }),
+    book(3003, '불편한 편의점', '김호연', 'read', { total_pages: 268, current_page: 268, rating: 7, finished: '2026-03-02' }),
+    book(3004, 'The Midnight Library', 'Matt Haig', 'read', { rating: 8, finished: '2025-11-20' }),
+    book(3005, '데미안', '헤르만 헤세', 'want'),
+    book(3006, '어떤 물질의 사랑', '천선란', 'want'),
+    book(3007, 'Klara and the Sun', 'Kazuo Ishiguro', 'want'),
   ];
   const settings: Record<string, string> = { 'expense.currency': 'KRW', 'expense.budget': '1200000' };
   let tracker = { paused: false, idle_threshold_secs: 300, tracked_apps: ['Code', 'Google Chrome'] };
@@ -291,12 +305,18 @@ export function installMock() {
         trpg.push({ ...a.entry, id: nextId, created_at: a.entry.created_at || now }); return nextId++;
       }
       case 'delete_trpg_entry': { const i = trpg.findIndex((e) => e.id === a.id); return i < 0 ? null : trpg.splice(i, 1)[0]; }
+      case 'books': return [...books].sort((x, y) => y.created_at - x.created_at);
+      case 'save_book': {
+        if (a.book.id) { Object.assign(books.find((b) => b.id === a.book.id)!, a.book); return a.book.id; }
+        books.push({ ...a.book, id: nextId, created_at: a.book.created_at || Math.floor(Date.now() / 1000) }); return nextId++;
+      }
+      case 'delete_book': { const i = books.findIndex((b) => b.id === a.id); return i < 0 ? null : books.splice(i, 1)[0]; }
       case 'plugin:dialog|save': return '/Users/you/Documents/Nora-backup.nora';
       case 'plugin:dialog|open': return '/Users/you/Documents/Nora-backup.nora';
       case 'export_data':
       case 'inspect_backup':
         return { format: 1, app_version: '0.1.0', exported_at: now - 86_400 * 3,
-          counts: { events: events.length, todos: todos.length, memos: memos.length, ddays: ddays.length, bookmarks: bookmarks.length, expenses: expenses.length, trpg: trpg.length, images: 2 } };
+          counts: { events: events.length, todos: todos.length, memos: memos.length, ddays: ddays.length, bookmarks: bookmarks.length, expenses: expenses.length, trpg: trpg.length, books: books.length, images: 2 } };
       case 'import_data':
       case 'reset_all_data':
         return null;

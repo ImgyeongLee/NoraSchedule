@@ -1,5 +1,5 @@
 <script lang="ts">
-  // TRPG log: sessions (want to play / played), rule books and scenario books on a shelf, and a report.
+  // TRPG log: sessions (want to play / played), rule books and scenario books (shelf or list), and a report.
   import { openUrl } from '@tauri-apps/plugin-opener';
   import {
     BookOpen, ChartPie, ChevronDown, ExternalLink, Library, Link, Pencil, Plus, ScrollText, Search, Sparkles, Swords, Trash, X,
@@ -9,9 +9,11 @@
   import DateField from '../components/DateField.svelte';
   import ImagePicker from '../components/ImagePicker.svelte';
   import TrpgReport from '../components/TrpgReport.svelte';
+  import Bookshelf from '../components/Bookshelf.svelte';
+  import BookViewToggle from '../components/BookViewToggle.svelte';
+  import { bookViews } from '../lib/bookView.svelte';
   import { api, type TrpgEntry, type TrpgKind } from '../lib/api';
   import { fmt, today } from '../lib/dates';
-  import { imageUrl } from '../lib/images';
   import { t, type Key } from '../lib/i18n.svelte';
   import { openMenu, type MenuItem } from '../lib/menu.svelte';
   import { data, load, mutate, toast } from '../lib/state.svelte';
@@ -27,13 +29,6 @@
   ];
   const isBook = (kind: TrpgKind) => kind === 'rulebook' || kind === 'scenario_book';
 
-  /** Cloth-cover colors for books without a cover image, picked from the title. */
-  const BOOK_COLORS = ['#2f4a7a', '#7a2e3a', '#2f6b4f', '#b0812a', '#21757d', '#5b3f86', '#8a5a3c', '#3d4f63', '#a8466a'];
-  function bookColor(title: string) {
-    let h = 0x811c9dc5;
-    for (const ch of title) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193) >>> 0;
-    return BOOK_COLORS[h % BOOK_COLORS.length];
-  }
 
   // Per-viewer conveniences, remembered in this browser only.
   const PREFS_KEY = 'nora.trpg';
@@ -227,6 +222,7 @@
         <input class="input" placeholder={t('trpg.search')} bind:value={query} />
       </label>
       {#if tab !== 'sessions'}
+        <BookViewToggle page="trpg" />
         <button class="btn primary" onclick={() => edit(blank(tab as TrpgKind))}><Plus size={16} /> {t(`trpg.add.${tab as 'rulebook' | 'scenario_book'}`)}</button>
       {/if}
     {/if}
@@ -274,24 +270,12 @@
   {:else}
     <div class="card shelf-card">
       {#if books.length}
-        <div class="shelf">
-          {#each books as b (b.id)}
-            <button class="book" style:--c={bookColor(b.title)} onclick={() => edit(b)} oncontextmenu={(ev) => entryMenu(ev, b)} title={b.title}>
-              <span class="cover" class:photo={!!b.image}>
-                {#if b.image}
-                  <img src={imageUrl(b.image, 'trpg-book')} alt="" draggable="false" />
-                {:else}
-                  <span class="cover-title">{b.title}</span>
-                  {#if b.writer}<span class="cover-writer truncate">{b.writer}</span>{/if}
-                {/if}
-              </span>
-              <span class="caption">
-                <span class="caption-title">{b.title}</span>
-                <span class="faint small truncate">{[b.system, b.writer].filter(Boolean).join(' · ')}</span>
-              </span>
-            </button>
-          {/each}
-        </div>
+        <Bookshelf items={books} view={bookViews.trpg} author={(b) => b.writer} onopen={edit} onmenu={entryMenu}>
+          {#snippet meta(b)}{[b.system, b.writer].filter(Boolean).join(' · ')}{/snippet}
+          {#snippet trailing(b)}
+            {#if b.links.length}<span class="faint small row-links"><ExternalLink size={13} /> {b.links.length}</span>{/if}
+          {/snippet}
+        </Bookshelf>
       {:else}
         {@render empty(tab as TrpgKind)}
       {/if}
@@ -568,121 +552,14 @@
     gap: 8px;
   }
 
-  /* ---- bookshelf: each row is a shelf; books stand on the plank, titles below it */
   .shelf-card {
     padding: 0;
     overflow: hidden;
   }
-  .shelf {
-    --cover-w: 124px;
-    --cover-h: 178px;
-    --top: 22px;
-    --plank: 12px;
-    --row: calc(var(--top) + var(--cover-h) + var(--plank) + 52px);
-    --plank-at: calc(var(--top) + var(--cover-h));
-    display: grid;
-    grid-template-columns: repeat(auto-fill, var(--cover-w));
-    grid-auto-rows: var(--row);
-    justify-content: space-evenly;
-    column-gap: 24px;
-    padding: 0 24px;
-    background: repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent var(--plank-at),
-      color-mix(in srgb, var(--muted) 30%, var(--surface-2)) var(--plank-at),
-      color-mix(in srgb, var(--muted) 22%, var(--surface-2)) calc(var(--plank-at) + var(--plank) - 3px),
-      color-mix(in srgb, var(--text) 18%, var(--surface)) calc(var(--plank-at) + var(--plank) - 3px),
-      color-mix(in srgb, var(--text) 18%, var(--surface)) calc(var(--plank-at) + var(--plank)),
-      transparent calc(var(--plank-at) + var(--plank)),
-      transparent var(--row)
-    );
-  }
-  .book {
-    display: flex;
-    flex-direction: column;
-    width: var(--cover-w);
-    padding: var(--top) 0 0;
-    border: none;
-    background: none;
-    text-align: left;
-    cursor: pointer;
-  }
-  .cover {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: var(--cover-h);
-    padding: 16px 12px 12px 18px;
-    border-radius: 3px 8px 8px 3px;
-    overflow: hidden;
-    color: #fff;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 45%),
-      linear-gradient(to bottom, color-mix(in srgb, var(--c) 88%, #fff), color-mix(in srgb, var(--c) 82%, #000));
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.2);
-    transition: transform 0.18s;
-  }
-  /* The spine: a darker band and a crease on the left edge. */
-  .cover::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      to right,
-      rgba(0, 0, 0, 0.28) 0,
-      rgba(0, 0, 0, 0.12) 7px,
-      rgba(255, 255, 255, 0.22) 8px,
-      transparent 11px
-    );
-    pointer-events: none;
-  }
-  .cover.photo {
-    padding: 0;
-    background: var(--surface-3);
-  }
-  .cover img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .book:hover .cover {
-    transform: translateY(-6px);
-  }
-  .cover-title {
-    font-size: 14px;
-    font-weight: 800;
-    line-height: 1.25;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    line-clamp: 5;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-  }
-  .cover-writer {
-    font-size: 11px;
-    font-weight: 600;
-    opacity: 0.85;
-  }
-  .caption {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    margin-top: calc(var(--plank) + 8px);
-    min-width: 0;
-  }
-  .caption-title {
-    font-size: 13px;
-    font-weight: 650;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .row-links {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
   }
 
   /* ---- editor */
@@ -724,12 +601,6 @@
     }
     .search {
       width: 100%;
-    }
-    .shelf {
-      --cover-w: 104px;
-      --cover-h: 150px;
-      column-gap: 16px;
-      padding: 0 12px;
     }
   }
 </style>
