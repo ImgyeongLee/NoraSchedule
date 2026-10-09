@@ -55,7 +55,7 @@ export function installMock() {
   });
   const events: CalEvent[] = [
     { ...ev('Team standup', 0, '09:30', '10:00', 0x4aa8ff, 'Zoom'), tags: [1], reminder: 10 },
-    ev('Design review', 0, '09:45', '11:00', 0xb164e8, 'Room 3'),
+    { ...ev('Design review', 0, '09:45', '11:00', 0xb164e8, 'Room 3'), tags: [2, 3] },
     ev('Lunch with 지민', 0, '12:00', '13:00', 0x34c38f, 'Cafe Onion'),
     ev('Gym', 1, '18:00', '19:30', 0xff8a5c),
     ev('Conference', 2, '', '', 0x7c74ff, 'Seoul', 4),
@@ -69,9 +69,9 @@ export function installMock() {
     { id: 3, name: 'Health', color: 0x34c38f, category: 'Personal' },
   ];
   const ddays: DDay[] = [
-    { id: 1, title: 'Final exam', date: addDays(t, 12), color: 0xf2668b, image: null, yearly: false, count_from_one: false },
-    { id: 2, title: 'Trip to Jeju', date: addDays(t, 40), color: 0x4aa8ff, image: null, yearly: false, count_from_one: false },
-    { id: 3, title: 'Started new job', date: addDays(t, -100), color: 0x34c38f, image: null, yearly: false, count_from_one: false },
+    { id: 1, title: 'Final exam', date: addDays(t, 12), color: 0xf2668b, image: null, yearly: false, count_from_one: false, shape: 'normal' },
+    { id: 2, title: 'Trip to Jeju', date: addDays(t, 40), color: 0x4aa8ff, image: null, yearly: false, count_from_one: false, shape: 'normal' },
+    { id: 3, title: 'Started new job', date: addDays(t, -100), color: 0x34c38f, image: null, yearly: false, count_from_one: false, shape: 'normal' },
   ];
   const groups: TodoGroup[] = [
     { id: 1, name: 'Work', color: 0x7c74ff },

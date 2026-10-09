@@ -24,15 +24,18 @@
   </div>
   {#if next}
     <div class="w-body">
-      <div
-        class="hero"
-        class:photo={!!next.image}
-        style:--c={hex(next.color)}
-        style:background-image={next.image ? `url('${imageUrl(next.image)}')` : undefined}
-      >
-        <span class="label">{ddayLabel(next)}</span>
-        <span class="name truncate">{next.title}</span>
-        <span class="faint small">{fmt(ddayTarget(next), { month: 'long', day: 'numeric', weekday: 'short' })}</span>
+      <div class="hero" class:photo={!!next.image} style:--c={hex(next.color)}>
+        {#if next.image}
+          <!-- Small text at the bottom so the photo stays the main thing. -->
+          <img class="bg" src={imageUrl(next.image, 'ddays-widget')} alt="" draggable="false" />
+          <span class="name truncate">{next.title}</span>
+          <span class="date">{fmt(ddayTarget(next), { month: 'long', day: 'numeric', weekday: 'short' })}</span>
+          <span class="label">{ddayLabel(next)}</span>
+        {:else}
+          <span class="label">{ddayLabel(next)}</span>
+          <span class="name truncate">{next.title}</span>
+          <span class="faint small">{fmt(ddayTarget(next), { month: 'long', day: 'numeric', weekday: 'short' })}</span>
+        {/if}
       </div>
       {#each rest as d (d.id)}
         <div class="rest">
@@ -55,23 +58,41 @@
   .hero.photo {
     position: relative;
     isolation: isolate;
-    padding: 12px 14px;
+    justify-content: flex-end;
+    min-height: 104px;
+    padding: 10px 12px;
     border-radius: 16px;
-    background-size: cover;
-    background-position: center;
+    overflow: hidden;
     color: #fff;
+  }
+  .bg {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .hero.photo::before {
     content: '';
     position: absolute;
     inset: 0;
     z-index: -1;
-    border-radius: inherit;
-    background: linear-gradient(to top, rgba(10, 12, 24, 0.75), rgba(10, 12, 24, 0.1));
+    background: linear-gradient(to top, rgba(10, 12, 24, 0.6), rgba(10, 12, 24, 0) 55%);
   }
-  .hero.photo .label,
-  .hero.photo .faint {
+  .photo .name {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  }
+  .photo .date {
+    font-size: 11px;
+    opacity: 0.85;
+  }
+  .photo .label {
+    font-size: 20px;
     color: #fff;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   }
   .label {
     font-size: 34px;

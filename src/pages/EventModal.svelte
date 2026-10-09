@@ -42,6 +42,8 @@
   let newLink = $state('');
   let error = $state('');
   const isNew = $derived(event.id === 0);
+  /** A tagged event is drawn in its first-picked tag's color (see eventColor). */
+  const colorTag = $derived(form.tags.map((id) => tagStore.list.find((x) => x.id === id)).find((x) => !!x));
   const repeating = $derived(isRepeatingOccurrence(event));
   let creatingTag = $state(false);
 
@@ -208,7 +210,13 @@
 
   <div class="field">
     <span class="label">{t('common.color')}</span>
-    <ColorPicker bind:value={form.color} />
+    {#if colorTag}
+      <p class="tag-color muted small" style:--tc={hex(colorTag.color)}>
+        <span class="tag-dot"></span>{t('event.colorFromTag', { tag: colorTag.name })}
+      </p>
+    {:else}
+      <ColorPicker bind:value={form.color} />
+    {/if}
   </div>
 
   <div class="field">
@@ -279,6 +287,11 @@
 {/if}
 
 <style>
+  .tag-color {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   .when {
     display: flex;
     flex-direction: column;

@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS ddays (
     color INTEGER NOT NULL,
     image TEXT,
     yearly INTEGER NOT NULL DEFAULT 0,
-    count_from_one INTEGER NOT NULL DEFAULT 0
+    count_from_one INTEGER NOT NULL DEFAULT 0,
+    shape TEXT NOT NULL DEFAULT 'normal'
 );
 
 CREATE TABLE IF NOT EXISTS todo_groups (
@@ -255,6 +256,17 @@ pub struct DDay {
     /// For past dates, count the date itself as day 1 (D+1) instead of day 0.
     #[serde(default)]
     pub count_from_one: bool,
+    /// Card shape on the D-Day page: `normal`, `wide` (landscape) or `tall` (portrait).
+    #[serde(default = "DDay::default_shape")]
+    pub shape: String,
+}
+
+impl DDay {
+    pub const SHAPES: [&'static str; 3] = ["normal", "wide", "tall"];
+
+    fn default_shape() -> String {
+        "normal".into()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -430,6 +442,12 @@ fn migrate(conn: &Connection) -> DbResult<()> {
             "ALTER TABLE ddays ADD COLUMN yearly INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE ddays ADD COLUMN count_from_one INTEGER NOT NULL DEFAULT 0;",
         )?;
+    }
+    let has_shape = conn
+        .prepare("SELECT 1 FROM pragma_table_info('ddays') WHERE name = 'shape'")?
+        .exists([])?;
+    if !has_shape {
+        conn.execute_batch("ALTER TABLE ddays ADD COLUMN shape TEXT NOT NULL DEFAULT 'normal'")?;
     }
     let has_cancelled = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name = 'cancelled'")?
@@ -679,7 +697,7 @@ impl Db {
     pub fn ddays(&self) -> DbResult<Vec<DDay>> {
         let mut st = self
             .conn
-            .prepare("SELECT id, title, date, color, image, yearly, count_from_one FROM ddays ORDER BY date")?;
+            .prepare("SELECT id, title, date, color, image, yearly, count_from_one, shape FROM ddays ORDER BY date")?;
         st.query_map([], |r| {
             Ok(DDay {
                 id: r.get(0)?,
@@ -689,6 +707,7 @@ impl Db {
                 image: r.get(4)?,
                 yearly: r.get(5)?,
                 count_from_one: r.get(6)?,
+                shape: r.get(7)?,
             })
         })?
         .collect()
@@ -698,13 +717,13 @@ impl Db {
         let date = d.date.format(D_FMT).to_string();
         if d.id == 0 {
             self.conn.execute(
-                "INSERT INTO ddays(title, date, color, image, yearly, count_from_one) VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-                params![d.title, date, d.color, d.image, d.yearly, d.count_from_one],
+                "INSERT INTO ddays(title, date, color, image, yearly, count_from_one, shape) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![d.title, date, d.color, d.image, d.yearly, d.count_from_one, d.shape],
             )?;
         } else {
             self.conn.execute(
-                "UPDATE ddays SET title=?1, date=?2, color=?3, image=?4, yearly=?5, count_from_one=?6 WHERE id=?7",
-                params![d.title, date, d.color, d.image, d.yearly, d.count_from_one, d.id],
+                "UPDATE ddays SET title=?1, date=?2, color=?3, image=?4, yearly=?5, count_from_one=?6, shape=?7 WHERE id=?8",
+                params![d.title, date, d.color, d.image, d.yearly, d.count_from_one, d.shape, d.id],
             )?;
         }
         Ok(())

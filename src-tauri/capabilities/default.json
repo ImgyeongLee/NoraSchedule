@@ -12,6 +12,7 @@
     "core:window:allow-maximize",
     "core:window:allow-center",
     "core:window:allow-set-size",
+    "core:webview:allow-set-webview-zoom",
     "opener:default",
     "notification:default",
     "dialog:default"

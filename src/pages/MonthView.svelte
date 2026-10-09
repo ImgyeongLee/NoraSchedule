@@ -7,6 +7,8 @@
   import { hex, textOn } from '../lib/colors';
   import { layoutLanes, type CalTodo } from '../lib/lanes';
   import TodoChip from '../components/TodoChip.svelte';
+  import TagDots from '../components/TagDots.svelte';
+  import { eventColor } from '../lib/tags.svelte';
   import { covers, fmt, isAllDayLane, monthStart, range, timeOf, today, weekStart, weekdayNames } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
 
@@ -123,8 +125,8 @@
                 class:to-next={b.toNext}
                 style:grid-column="{b.col + 1} / span {b.span}"
                 style:grid-row={b.lane + 1}
-                style:--c={hex(e.color)}
-                style:--on-c={textOn(e.color)}
+                style:--c={hex(eventColor(e))}
+                style:--on-c={textOn(eventColor(e))}
                 onclick={(ev) => { ev.stopPropagation(); onopen(e); }}
                 ondblclick={(ev) => ev.stopPropagation()}
                 title={isAllDayLane(e) ? e.title : `${timeOf(e.start)} ${e.title}`}
@@ -132,6 +134,7 @@
                 oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => onopen(e)))}
               >
                 {#if e.repeat}<Repeat size={11} />{/if}
+                <TagDots event={e} />
                 {#if !isAllDayLane(e)}<span class="time">{timeOf(e.start)}</span>{/if}
                 <span class="truncate">{e.title}</span>
               </button>

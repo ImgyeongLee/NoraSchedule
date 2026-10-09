@@ -38,8 +38,12 @@ export function toggleTagFilter(id: number) {
   setTagFilter(tagStore.filter.includes(id) ? tagStore.filter.filter((x) => x !== id) : [...tagStore.filter, id]);
 }
 
-/** The event's tags, in list order, skipping ids that were deleted. */
-export const tagsOf = (e: CalEvent): Tag[] => tagStore.list.filter((t) => e.tags.includes(t.id));
+/** The event's tags in the order they were picked, skipping ids that were deleted. */
+export const tagsOf = (e: CalEvent): Tag[] =>
+  e.tags.flatMap((id) => tagStore.list.find((t) => t.id === id) ?? []);
+
+/** The color an event is drawn in: its first-picked tag's color, or its own when it has no tags. */
+export const eventColor = (e: CalEvent): number => tagsOf(e)[0]?.color ?? e.color;
 
 /** Whether the event passes the calendar's tag filter. */
 export const matchesTagFilter = (e: CalEvent) => !tagStore.filter.length || e.tags.some((id) => tagStore.filter.includes(id));

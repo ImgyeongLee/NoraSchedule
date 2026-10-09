@@ -7,7 +7,7 @@
   import { hideHoverCard, hoverCard } from '../lib/hovercard.svelte';
   import { t } from '../lib/i18n.svelte';
   import { reminderLabel } from '../lib/reminders';
-  import { tagsOf } from '../lib/tags.svelte';
+  import { eventColor, tagsOf } from '../lib/tags.svelte';
 
   const WIDTH = 290;
   const GAP = 8;
@@ -40,7 +40,7 @@
     {#if hoverCard.heading}<div class="heading">{hoverCard.heading}</div>{/if}
     {#each hoverCard.events.slice(0, 6) as e (`${e.id}-${e.occurrence}`)}
       {@const tags = tagsOf(e)}
-      <div class="ev" style:--c={hex(e.color)}>
+      <div class="ev" style:--c={hex(eventColor(e))}>
         <div class="title-row">
           <span class="swatch"></span>
           <span class="title" class:cancelled={e.cancelled}>{e.title}</span>

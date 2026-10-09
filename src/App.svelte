@@ -17,6 +17,7 @@
   import EventHoverCard from './components/EventHoverCard.svelte';
   import { refreshTags } from './lib/tags.svelte';
   import { initReminders } from './lib/reminders';
+  import { initZoom, stepZoom } from './lib/window.svelte';
   import StickerLayer from './components/StickerLayer.svelte';
   import { loadStickers, setDecorating, stickers } from './lib/stickers.svelte';
   import Home from './pages/Home.svelte';
@@ -56,6 +57,7 @@
     initTheme();
     initLocale();
     initSidebar();
+    initZoom();
     pomodoro.load();
     refreshTags();
     loadStickers();
@@ -136,6 +138,10 @@
     } else if (e.key === '\\') {
       e.preventDefault();
       setSidebarCollapsed(!ui.sidebarCollapsed);
+    } else if (e.key === '=' || e.key === '+' || e.key === '-') {
+      // ⌘+ / ⌘- zoom the whole app (⌘0 is taken by the tenth page; reset in Settings).
+      e.preventDefault();
+      stepZoom(e.key === '-' ? -1 : 1);
     } else {
       // ⌘1 … ⌘9 open the first nine pages, ⌘0 the tenth.
       const n = e.key === '0' ? 10 : Number(e.key);

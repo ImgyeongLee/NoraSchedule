@@ -1,7 +1,8 @@
 //! User images: D-Day covers, the Overview header and image cards, and stickers.
 //!
 //! Uploads are re-encoded on import (EXIF-rotated, scaled down, saved as JPEG) so a
-//! 10 MB phone photo becomes a ~150 KB file. Stickers with transparency are kept as PNG.
+//! 10 MB phone photo becomes a ~150 KB file. Stickers with transparency are kept as PNG,
+//! and GIFs are kept unchanged so they stay animated.
 //! Files live in `<data dir>/images` and are deleted as soon as nothing references them.
 
 use std::collections::HashSet;
@@ -36,11 +37,6 @@ pub enum Purpose {
 }
 
 impl Purpose {
-    /// Decorations keep animated GIFs; D-Day covers become a still photo.
-    fn keeps_animation(self) -> bool {
-        matches!(self, Purpose::Card | Purpose::Header | Purpose::Sticker)
-    }
-
     fn max_side(self) -> u32 {
         match self {
             Purpose::Cover => MAX_SIDE,
@@ -53,7 +49,7 @@ impl Purpose {
 pub const JPEG_QUALITY: u8 = 82;
 /// Refuse absurdly large uploads before decoding them.
 pub const MAX_UPLOAD_BYTES: usize = 40 * 1024 * 1024;
-/// Animated GIFs (stickers, header, image cards) are kept unchanged, so they get a tighter limit.
+/// Animated GIFs are kept unchanged, so they get a tighter limit.
 pub const MAX_GIF_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug)]
@@ -81,14 +77,14 @@ impl From<std::io::Error> for ImageError {
 }
 
 /// Decodes any supported image and returns the optimized file and its extension
-/// (`jpg`, or `png` for stickers with transparency).
+/// (`jpg`, `png` for stickers with transparency, or `gif`).
 pub fn optimize(bytes: &[u8], purpose: Purpose) -> Result<(Vec<u8>, &'static str), ImageError> {
     if bytes.len() > MAX_UPLOAD_BYTES {
         return Err(ImageError::TooLarge);
     }
-    // Re-encoding would keep only the first frame, so decorative GIFs are stored as they are
+    // Re-encoding would keep only the first frame, so GIFs (any purpose) are stored as they are
     // (after checking they really are GIFs) and keep their animation.
-    if purpose.keeps_animation() && image::guess_format(bytes).ok() == Some(image::ImageFormat::Gif) {
+    if image::guess_format(bytes).ok() == Some(image::ImageFormat::Gif) {
         if bytes.len() > MAX_GIF_BYTES {
             return Err(ImageError::TooLarge);
         }
@@ -248,15 +244,14 @@ mod tests {
     }
 
     #[test]
-    fn decorative_gifs_are_kept_as_is_so_they_stay_animated() {
+    fn gifs_are_kept_as_is_so_they_stay_animated() {
         let input = gif(3);
         let (output, ext) = optimize(&input, Purpose::Sticker).unwrap();
         assert_eq!(ext, "gif");
         assert_eq!(output, input);
         assert_eq!(optimize(&input, Purpose::Header).unwrap().1, "gif");
         assert_eq!(optimize(&input, Purpose::Card).unwrap().1, "gif");
-        // D-Day covers still get a still JPEG.
-        assert_eq!(optimize(&input, Purpose::Cover).unwrap().1, "jpg");
+        assert_eq!(optimize(&input, Purpose::Cover).unwrap().1, "gif");
         // Something that only claims to be a GIF is refused.
         assert!(matches!(optimize(b"GIF89a broken", Purpose::Sticker), Err(ImageError::Unsupported)));
     }

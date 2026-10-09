@@ -15,7 +15,7 @@
   import { eventMenu, pageTarget, pasteAsEvent } from '../lib/clipboard.svelte';
   import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
-  import { groupedTags, matchesTagFilter, setTagFilter, tagStore, tagsOf, toggleTagFilter } from '../lib/tags.svelte';
+  import { eventColor, groupedTags, matchesTagFilter, setTagFilter, tagStore, tagsOf, toggleTagFilter } from '../lib/tags.svelte';
   import TagManager from '../components/TagManager.svelte';
   import TodoChip from '../components/TodoChip.svelte';
   import { loadCalendarTodos } from '../lib/calendarTodos';
@@ -165,8 +165,8 @@
         <button
           class="agenda-item event-block"
           class:cancelled={e.cancelled}
-          style:--c={hex(e.color)}
-          style:--on-c={textOn(e.color)}
+          style:--c={hex(eventColor(e))}
+          style:--on-c={textOn(eventColor(e))}
           onclick={() => (editing = e)}
           {...eventHover(e)}
           oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => (editing = e)))}
@@ -247,9 +247,11 @@
 
 <style>
   .calendar {
+    /* One spacing for both the calendar ↔ side column and between the side cards. */
+    --gap: 16px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 270px;
-    gap: 20px;
+    gap: var(--gap);
     height: 100%;
     padding: 28px 24px 20px 28px;
   }
@@ -289,7 +291,7 @@
   .side {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--gap);
     overflow-y: auto;
     min-height: 0;
   }

@@ -76,7 +76,11 @@ export interface DDay {
   yearly: boolean;
   /** For past dates, count the date itself as day 1 (D+1) instead of day 0. */
   count_from_one: boolean;
+  /** Card shape on the D-Day page: landscape (`wide`) or portrait (`tall`). */
+  shape: DDayShape;
 }
+
+export type DDayShape = 'normal' | 'wide' | 'tall';
 
 export interface TodoGroup {
   id: number;

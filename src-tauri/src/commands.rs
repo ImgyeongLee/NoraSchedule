@@ -122,6 +122,9 @@ pub fn ddays(state: State<AppState>) -> CmdResult<Vec<DDay>> {
 #[tauri::command]
 pub fn save_dday(state: State<AppState>, mut dday: DDay) -> CmdResult<()> {
     dday.image = dday.image.filter(|name| crate::images::is_safe_name(name));
+    if !DDay::SHAPES.contains(&dday.shape.as_str()) {
+        dday.shape = DDay::SHAPES[0].into();
+    }
     with_db(&state, |db| db.save_dday(&dday))?;
     // A replaced or removed cover image is no longer referenced: delete the file.
     remove_unused_images(state)

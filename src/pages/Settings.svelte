@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import {
     AppWindow, Check, Database, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
-    Pipette, Trash, TriangleAlert, Upload, X,
+    Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
   } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
   import { api, type BackupManifest } from '../lib/api';
@@ -13,8 +13,10 @@
   import { fromHex, hex } from '../lib/colors';
   import { DEFAULT_CUSTOM_THEME, TINT_LEVELS } from '../lib/customTheme';
   import {
-    MAX_SAVED, applyPreset, applySaved, currentSize, loadSavedSizes, maximize, storeSavedSizes, type WindowSize,
-  } from '../lib/window';
+    MAX_SAVED, ZOOM_STEPS, applyPreset, applySaved, currentSize, loadSavedSizes, maximize, setZoom, storeSavedSizes, zoom,
+    type WindowSize,
+  } from '../lib/window.svelte';
+  import { shortcut } from '../lib/clipboard.svelte';
 
   const LANGUAGES: { id: Locale; name: string; sample: string; badge: string }[] = [
     { id: 'ko', name: '한국어', sample: '안녕하세요! 오늘 일정을 확인해 볼까요?', badge: '가' },
@@ -220,6 +222,27 @@
             <button class="btn small ghost" onclick={() => setCustomTheme({ ...DEFAULT_CUSTOM_THEME })}>{t('set.customReset')}</button>
           </div>
         </div>
+      {/if}
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div class="icon"><ZoomIn size={18} /></div>
+        <div>
+          <h2>{t('set.zoom')}</h2>
+          <p class="muted small">{t('set.zoomBody', { keys: `${shortcut('+')} / ${shortcut('-')}` })}</p>
+        </div>
+      </div>
+      <div class="zooms">
+        {#each ZOOM_STEPS as z (z)}
+          <button class="zoom" class:selected={Math.abs(zoom.level - z) < 0.001} onclick={() => run(setZoom(z))}>
+            <span class="zoom-sample" style:font-size="{Math.round(15 * z)}px">Aa</span>
+            {Math.round(z * 100)}%
+          </button>
+        {/each}
+      </div>
+      {#if zoom.level !== 1}
+        <button class="btn small zoom-reset" onclick={() => run(setZoom(1))}>{t('set.zoomReset')}</button>
       {/if}
     </section>
 
@@ -668,6 +691,44 @@
   }
   .sub-label {
     margin: 4px 0 8px;
+  }
+  .zooms {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 8px;
+  }
+  .zoom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    height: 72px;
+    padding: 8px 4px 10px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .zoom:hover {
+    border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  }
+  .zoom.selected {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+  .zoom-sample {
+    font-weight: 750;
+    line-height: 1;
+    color: var(--text);
+  }
+  .zoom-reset {
+    margin-top: 12px;
   }
   .presets {
     display: grid;

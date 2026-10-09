@@ -9,6 +9,8 @@
   import { eventMenu, pasteAsEvent, pasteOnHover } from '../lib/clipboard.svelte';
   import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
+  import { eventColor } from '../lib/tags.svelte';
+  import TagDots from '../components/TagDots.svelte';
 
   let events = $state<CalEvent[]>([]);
   let ddays = $state<DDay[]>([]);
@@ -42,13 +44,14 @@
       <button
         class="item event-block"
         class:cancelled={e.cancelled}
-        style:--c={hex(e.color)}
-        style:--on-c={textOn(e.color)}
+        style:--c={hex(eventColor(e))}
+        style:--on-c={textOn(eventColor(e))}
         onclick={() => (editing = e)}
         {...eventHover(e)}
         oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => (editing = e)))}
       >
         <span class="time tabular">{isAllDayLane(e) ? t('common.allDay') : timeOf(e.start)}</span>
+        <TagDots event={e} />
         <span class="title truncate">{e.title}</span>
       </button>
     {:else}

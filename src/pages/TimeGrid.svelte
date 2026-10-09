@@ -8,6 +8,8 @@
   import { hex, textOn } from '../lib/colors';
   import { layoutLanes, type CalTodo } from '../lib/lanes';
   import TodoChip from '../components/TodoChip.svelte';
+  import TagDots from '../components/TagDots.svelte';
+  import { eventColor } from '../lib/tags.svelte';
   import { covers, fmt, isAllDayLane, minutesOf, overlapColumns, pad, timeOf, today } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
 
@@ -129,13 +131,14 @@
           class:to-next={b.toNext}
           style:grid-column="{b.col + 2} / span {b.span}"
           style:grid-row={b.lane + 1}
-          style:--c={hex(e.color)}
-          style:--on-c={textOn(e.color)}
+          style:--c={hex(eventColor(e))}
+          style:--on-c={textOn(eventColor(e))}
           onclick={() => onopen(e)}
           title={e.title}
           {...eventHover(e)}
           oncontextmenu={(ev) => openMenu(ev, eventMenu(e, () => onopen(e)))}
         >
+          <TagDots event={e} />
           {#if e.repeat}<Repeat size={11} />{/if}
           <span class="truncate">{e.title}</span>
         </button>
@@ -172,8 +175,8 @@
             <button
               class="event event-block"
               class:cancelled={t.e.cancelled}
-              style:--c={hex(t.e.color)}
-              style:--on-c={textOn(t.e.color)}
+              style:--c={hex(eventColor(t.e))}
+              style:--on-c={textOn(eventColor(t.e))}
               style:top="{(t.s / 60) * HOUR + 1}px"
               style:height="{((t.end - t.s) / 60) * HOUR - 3}px"
               style:left="calc({(t.col / t.cols) * 100}% + 3px)"
@@ -183,7 +186,7 @@
               {...eventHover(t.e)}
               oncontextmenu={(ev) => openMenu(ev, eventMenu(t.e, () => onopen(t.e)))}
             >
-              <span class="ev-title">{#if t.e.repeat}<Repeat size={11} />{/if} {t.e.title}</span>
+              <span class="ev-title"><TagDots event={t.e} />{#if t.e.repeat}<Repeat size={11} />{/if} {t.e.title}</span>
               <span class="ev-time">{timeOf(t.e.start)} – {timeOf(t.e.end)}</span>
               {#if t.e.location}<span class="ev-time truncate loc"><MapPin size={11} /> {t.e.location}</span>{/if}
             </button>
@@ -360,6 +363,10 @@
     font-size: 12.5px;
     font-weight: 650;
     line-height: 1.25;
+  }
+  .ev-title :global(.tag-dots) {
+    margin-right: 4px;
+    vertical-align: 1px;
   }
   .ev-time {
     font-size: 11.5px;

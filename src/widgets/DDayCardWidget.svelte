@@ -21,25 +21,31 @@
     ddays.find((d) => d.id === ddayId) ?? byDdayTarget(ddays.filter((d) => ddayUpcoming(d)))[0] ?? ddays[ddays.length - 1],
   );
 
+  /** Empty for "Day N", which the D+N label already says. */
   function relative(d: DDay) {
     const n = ddayDays(d);
     if (n === 0) return t('dd.today');
-    if (n < 0 && d.count_from_one) return t('dd.dayN', { n: -n });
+    if (n < 0 && d.count_from_one) return '';
     return n > 0 ? t('dd.inDays', { n }) : t('dd.daysAgo', { n: -n });
   }
+
+  const date = (d: DDay) =>
+    [fmt(ddayTarget(d), { month: 'long', day: 'numeric', weekday: 'short' }), relative(d)].filter(Boolean).join(' · ');
 </script>
 
-{#if dday}
-  <button
-    class="card-dday"
-    class:photo={!!dday.image}
-    style:--c={hex(dday.color)}
-    style:background-image={dday.image ? `url('${imageUrl(dday.image)}')` : undefined}
-    onclick={() => (ui.page = 'ddays')}
-  >
+{#if dday?.image}
+  <!-- Small text at the bottom so the photo stays the main thing. -->
+  <button class="card-dday photo" style:--c={hex(dday.color)} onclick={() => (ui.page = 'ddays')}>
+    <img class="bg" src={imageUrl(dday.image, 'dday-card')} alt="" draggable="false" />
+    <span class="title truncate">{dday.title}</span>
+    <span class="date">{date(dday)}</span>
+    <span class="label">{ddayLabel(dday)}</span>
+  </button>
+{:else if dday}
+  <button class="card-dday" style:--c={hex(dday.color)} onclick={() => (ui.page = 'ddays')}>
     <span class="label">{ddayLabel(dday)}</span>
     <span class="title truncate">{dday.title}</span>
-    <span class="date">{fmt(ddayTarget(dday), { month: 'long', day: 'numeric', weekday: 'short' })} · {relative(dday)}</span>
+    <span class="date">{date(dday)}</span>
   </button>
 {:else}
   <div class="widget">
@@ -76,14 +82,39 @@
     background-position: center;
   }
   .card-dday.photo {
+    gap: 0;
+    padding: 14px 18px;
     color: #fff;
+  }
+  .bg {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .card-dday.photo::before {
     content: '';
     position: absolute;
     inset: 0;
     z-index: -1;
-    background: linear-gradient(to top, rgba(10, 12, 24, 0.78), rgba(10, 12, 24, 0.12) 70%);
+    background: linear-gradient(to top, rgba(10, 12, 24, 0.6), rgba(10, 12, 24, 0) 45%);
+  }
+  .photo .title {
+    font-size: 13.5px;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  }
+  .photo .date {
+    font-size: 11.5px;
+    opacity: 0.85;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+  }
+  .photo .label {
+    margin-top: 2px;
+    font-size: 26px;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   }
   .label {
     font-size: 40px;
@@ -91,10 +122,6 @@
     letter-spacing: -0.03em;
     line-height: 1.05;
     color: var(--c);
-  }
-  .photo .label {
-    color: #fff;
-    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
   }
   .title {
     max-width: 100%;
