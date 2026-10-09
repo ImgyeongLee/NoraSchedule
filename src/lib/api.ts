@@ -129,6 +129,29 @@ export interface Expense {
   note: string;
 }
 
+export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface Meal {
+  id: number;
+  date: DateStr;
+  slot: MealSlot;
+  name: string;
+  kcal: number;
+  /** false = planned (going to eat it), true = already eaten. */
+  eaten: boolean;
+}
+
+export interface Workout {
+  id: number;
+  date: DateStr;
+  /** Preset exercise id, see lib/health.svelte.ts. */
+  kind: string;
+  minutes: number;
+  /** Calories burned: the estimate when it was saved, or the user's own number. */
+  kcal: number;
+  note: string;
+}
+
 /** Which TRPG list an entry belongs to. */
 export type TrpgKind = 'rulebook' | 'scenario_book' | 'played' | 'wishlist';
 
@@ -182,7 +205,7 @@ export interface BackupManifest {
   format: number;
   app_version: string;
   exported_at: number;
-  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; trpg?: number; books?: number; images: number };
+  counts: { events: number; todos: number; memos: number; ddays: number; bookmarks: number; expenses: number; trpg?: number; books?: number; meals?: number; workouts?: number; images: number };
 }
 
 export interface Memo {
@@ -297,6 +320,13 @@ export const api = {
   expensesBetween: (from: DateStr, to: DateStr) => invoke<Expense[]>('expenses_between', { from, to }),
   saveExpense: (expense: Expense) => invoke<number>('save_expense', { expense }),
   deleteExpense: (id: number) => invoke<Expense | null>('delete_expense', { id }),
+
+  mealsBetween: (from: DateStr, to: DateStr) => invoke<Meal[]>('meals_between', { from, to }),
+  saveMeal: (meal: Meal) => invoke<number>('save_meal', { meal }),
+  deleteMeal: (id: number) => invoke<Meal | null>('delete_meal', { id }),
+  workoutsBetween: (from: DateStr, to: DateStr) => invoke<Workout[]>('workouts_between', { from, to }),
+  saveWorkout: (workout: Workout) => invoke<number>('save_workout', { workout }),
+  deleteWorkout: (id: number) => invoke<Workout | null>('delete_workout', { id }),
 
   trpgEntries: () => invoke<TrpgEntry[]>('trpg_entries'),
   saveTrpgEntry: (entry: TrpgEntry) => invoke<number>('save_trpg_entry', { entry }),

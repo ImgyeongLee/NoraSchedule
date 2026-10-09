@@ -2,7 +2,7 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC } from '@tauri-apps/api/mocks';
-import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Memo, MemoGroup, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
+import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Expense, Meal, Memo, MemoGroup, Workout, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
@@ -134,6 +134,20 @@ export function installMock() {
       expenses.push({ id: 1000 + d * 10 + k, amount: base + ((d * 7 + k * 13) % 9) * 500, category: c, date: day, note: k === 0 && c === 'food' ? 'Lunch' : '' });
     }
   }
+  const meals: Meal[] = [];
+  const workouts: Workout[] = [];
+  const foods: [Meal['slot'], string, number][] = [
+    ['breakfast', 'Greek yogurt & granola', 320], ['breakfast', '아메리카노', 10], ['lunch', '김밥', 450],
+    ['lunch', 'Chicken salad', 420], ['dinner', '된장찌개 & 밥', 620], ['snack', 'Banana', 105], ['dinner', 'Salmon bowl', 680],
+  ];
+  for (let d = -6; d <= 1; d++) {
+    const day = addDays(t, d);
+    foods.forEach(([slot, name, kcal], i) => {
+      if ((i + d) % 3 === 0 && d !== 0) return;
+      meals.push({ id: 5000 + (d + 6) * 10 + i, date: day, slot, name, kcal, eaten: d < 0 || (d === 0 && slot !== 'dinner') });
+    });
+    if (d <= 0 && d % 2 === 0) workouts.push({ id: 6000 + d + 6, date: day, kind: d === 0 ? 'running' : 'walking', minutes: d === 0 ? 30 : 45, kcal: d === 0 ? 294 : 158, note: '' });
+  }
   const trpg: TrpgEntry[] = [
     { id: 2000, kind: 'rulebook', title: 'Call of Cthulhu 7th Edition', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', folder: '', memo: '', created_at: now - 86_400 * 90 },
     { id: 2001, kind: 'scenario_book', title: 'Doors to Darkness', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', folder: '', memo: '5 starter scenarios', created_at: now - 86_400 * 60 },
@@ -161,6 +175,8 @@ export function installMock() {
     book(3007, 'Klara and the Sun', 'Kazuo Ishiguro', 'want'),
   ];
   const settings: Record<string, string> = { 'expense.currency': 'KRW', 'expense.budget': '1200000' };
+  const previewLocale = new URLSearchParams(location.search).get('locale');
+  if (previewLocale) settings['ui.locale'] = previewLocale;
   let tracker = { paused: false, idle_threshold_secs: 300, tracked_apps: ['Code', 'Google Chrome'] };
 
   mockIPC((cmd, a: any) => {
@@ -300,6 +316,18 @@ export function installMock() {
         expenses.push({ ...a.expense, id: nextId }); return nextId++;
       }
       case 'delete_expense': { const i = expenses.findIndex((e) => e.id === a.id); return i < 0 ? null : expenses.splice(i, 1)[0]; }
+      case 'meals_between': return meals.filter((m) => m.date >= a.from && m.date <= a.to).sort((x, y) => x.date.localeCompare(y.date) || x.id - y.id);
+      case 'save_meal': {
+        if (a.meal.id) { Object.assign(meals.find((m) => m.id === a.meal.id)!, a.meal); return a.meal.id; }
+        meals.push({ ...a.meal, id: nextId }); return nextId++;
+      }
+      case 'delete_meal': { const i = meals.findIndex((m) => m.id === a.id); return i < 0 ? null : meals.splice(i, 1)[0]; }
+      case 'workouts_between': return workouts.filter((w) => w.date >= a.from && w.date <= a.to).sort((x, y) => x.date.localeCompare(y.date) || x.id - y.id);
+      case 'save_workout': {
+        if (a.workout.id) { Object.assign(workouts.find((w) => w.id === a.workout.id)!, a.workout); return a.workout.id; }
+        workouts.push({ ...a.workout, id: nextId }); return nextId++;
+      }
+      case 'delete_workout': { const i = workouts.findIndex((w) => w.id === a.id); return i < 0 ? null : workouts.splice(i, 1)[0]; }
       case 'trpg_entries': return [...trpg].sort((x, y) => x.kind.localeCompare(y.kind) || (y.date ?? '').localeCompare(x.date ?? '') || y.created_at - x.created_at);
       case 'save_trpg_entry': {
         if (a.entry.id) { Object.assign(trpg.find((e) => e.id === a.entry.id)!, a.entry); return a.entry.id; }
@@ -317,7 +345,7 @@ export function installMock() {
       case 'export_data':
       case 'inspect_backup':
         return { format: 1, app_version: '0.1.0', exported_at: now - 86_400 * 3,
-          counts: { events: events.length, todos: todos.length, memos: memos.length, ddays: ddays.length, bookmarks: bookmarks.length, expenses: expenses.length, trpg: trpg.length, books: books.length, images: 2 } };
+          counts: { events: events.length, todos: todos.length, memos: memos.length, ddays: ddays.length, bookmarks: bookmarks.length, expenses: expenses.length, trpg: trpg.length, books: books.length, meals: meals.length, workouts: workouts.length, images: 2 } };
       case 'import_data':
       case 'reset_all_data':
         return null;

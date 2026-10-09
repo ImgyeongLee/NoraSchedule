@@ -5,6 +5,7 @@ mod bookmarks;
 mod commands;
 mod db;
 mod expenses;
+mod health;
 mod images;
 mod reading;
 mod recurrence;
@@ -97,6 +98,12 @@ fn main() {
             commands::expenses_between,
             commands::save_expense,
             commands::delete_expense,
+            commands::meals_between,
+            commands::save_meal,
+            commands::delete_meal,
+            commands::workouts_between,
+            commands::save_workout,
+            commands::delete_workout,
             commands::trpg_entries,
             commands::save_trpg_entry,
             commands::delete_trpg_entry,

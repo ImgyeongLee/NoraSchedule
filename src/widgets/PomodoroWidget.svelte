@@ -40,7 +40,7 @@
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     min-height: 0;
   }
   .ring {
@@ -70,6 +70,7 @@
     transition: stroke-dashoffset 0.3s linear;
   }
   .side {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -84,8 +85,15 @@
     align-items: center;
     gap: 4px;
   }
+  /* Longer labels (e.g. Japanese) must stay inside a small tile. */
   .play {
+    min-width: 0;
+    max-width: 100%;
+    padding-inline: 14px;
     background: var(--c);
     box-shadow: 0 4px 14px color-mix(in srgb, var(--c) 35%, transparent);
+  }
+  .play :global(svg) {
+    flex: none;
   }
 </style>

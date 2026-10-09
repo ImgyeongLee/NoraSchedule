@@ -9,6 +9,7 @@ use crate::AppState;
 use crate::backup::{self, Manifest};
 use crate::bookmarks::{Bookmark, BookmarkFolder};
 use crate::expenses::Expense;
+use crate::health::{self, Meal, Workout};
 use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, MemoGroup, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
 use crate::reading::Book;
@@ -458,6 +459,51 @@ pub fn save_expense(state: State<AppState>, expense: Expense) -> CmdResult<i64> 
 #[tauri::command]
 pub fn delete_expense(state: State<AppState>, id: i64) -> CmdResult<Option<Expense>> {
     with_db(&state, |db| db.delete_expense(id))
+}
+
+// ---- diet and exercise -----------------------------------------------------------
+
+#[tauri::command]
+pub fn meals_between(state: State<AppState>, from: NaiveDate, to: NaiveDate) -> CmdResult<Vec<Meal>> {
+    with_db(&state, |db| db.meals_between(from, to))
+}
+
+#[tauri::command]
+pub fn save_meal(state: State<AppState>, meal: Meal) -> CmdResult<i64> {
+    let name = meal.name.trim();
+    if name.is_empty() {
+        return Err("name required".into());
+    }
+    if !Meal::SLOTS.contains(&meal.slot.as_str()) || !(0..=health::MAX_KCAL).contains(&meal.kcal) {
+        return Err("invalid meal".into());
+    }
+    with_db(&state, |db| db.save_meal(&Meal { name: name.into(), ..meal }))
+}
+
+#[tauri::command]
+pub fn delete_meal(state: State<AppState>, id: i64) -> CmdResult<Option<Meal>> {
+    with_db(&state, |db| db.delete_meal(id))
+}
+
+#[tauri::command]
+pub fn workouts_between(state: State<AppState>, from: NaiveDate, to: NaiveDate) -> CmdResult<Vec<Workout>> {
+    with_db(&state, |db| db.workouts_between(from, to))
+}
+
+#[tauri::command]
+pub fn save_workout(state: State<AppState>, workout: Workout) -> CmdResult<i64> {
+    if workout.kind.trim().is_empty()
+        || !(1..=health::MAX_MINUTES).contains(&workout.minutes)
+        || !(0..=health::MAX_KCAL).contains(&workout.kcal)
+    {
+        return Err("invalid workout".into());
+    }
+    with_db(&state, |db| db.save_workout(&Workout { note: workout.note.trim().into(), ..workout }))
+}
+
+#[tauri::command]
+pub fn delete_workout(state: State<AppState>, id: i64) -> CmdResult<Option<Workout>> {
+    with_db(&state, |db| db.delete_workout(id))
 }
 
 // ---- backup, restore and reset -----------------------------------------------------

@@ -23,6 +23,7 @@
   const LANGUAGES: { id: Locale; name: string; sample: string; badge: string }[] = [
     { id: 'ko', name: '한국어', sample: '안녕하세요! 오늘 일정을 확인해 볼까요?', badge: '가' },
     { id: 'en', name: 'English', sample: "Hello! Let's check today's schedule.", badge: 'A' },
+    { id: 'ja', name: '日本語', sample: 'こんにちは！今日の予定を確認しましょう。', badge: 'あ' },
   ];
 
   const THEMES: { id: ThemePref; icon: typeof Sun; label: () => string }[] = [
@@ -79,7 +80,7 @@
   let resetUnderstood = $state(false);
   let restarting = $state(false);
 
-  const COUNT_KEYS = ['events', 'todos', 'memos', 'ddays', 'bookmarks', 'expenses', 'trpg', 'books', 'images'] as const;
+  const COUNT_KEYS = ['events', 'todos', 'memos', 'ddays', 'bookmarks', 'expenses', 'meals', 'workouts', 'trpg', 'books', 'images'] as const;
 
   async function doExport() {
     exporting = true;
