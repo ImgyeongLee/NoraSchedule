@@ -176,6 +176,13 @@ fn main() {
             commands::tracker_settings,
             commands::set_tracker_settings,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Nora Schedule");
+        .build(tauri::generate_context!())
+        .expect("error while building Nora Schedule")
+        .run(|_app, _event| {
+            // macOS: clicking the Dock icon while only the panel is showing brings the app back.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                panel::show_main(_app, None, None, None);
+            }
+        });
 }
