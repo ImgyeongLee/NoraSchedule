@@ -43,7 +43,8 @@ pub struct TrpgEntry {
     /// Place in the custom (dragged) order of its list; ties are shown A–Z.
     #[serde(default)]
     pub position: i64,
-    /// How many times the user has played from this scenario book (`scenario_book` entries).
+    /// Times a played session was played again after the first (`played` entries), so it counts
+    /// 1 + this. (Before 0.6 this counted plays of scenario books; those values are no longer used.)
     #[serde(default)]
     pub play_count: i64,
 }
@@ -183,9 +184,9 @@ mod tests {
     }
 
     #[test]
-    fn scenario_books_keep_how_many_times_they_were_played() {
+    fn played_sessions_keep_how_many_times_they_were_played_again() {
         let (db, path) = temp_db();
-        let id = db.save_trpg_entry(&TrpgEntry { play_count: 2, ..entry("scenario_book", "Doors to Darkness", None) }).unwrap();
+        let id = db.save_trpg_entry(&TrpgEntry { play_count: 2, ..entry("played", "COSMOS", Some("2026-03-03")) }).unwrap();
         let stored = db.trpg_entries().unwrap().into_iter().find(|e| e.id == id).unwrap();
         assert_eq!(stored.play_count, 2);
         db.save_trpg_entry(&TrpgEntry { play_count: 3, ..stored }).unwrap();

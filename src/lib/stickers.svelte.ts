@@ -18,6 +18,8 @@ export interface PlacedSticker {
   w: number;
   /** Rotation in degrees. */
   rot: number;
+  /** Drawn behind the page's tiles and cards instead of on top of them. */
+  back?: boolean;
 }
 
 const SETTING = 'stickers';
@@ -51,6 +53,7 @@ export async function loadStickers() {
         y: clamp(p.y, 0, 1),
         w: clamp(p.w, MIN_W, MAX_W),
         rot: Number.isFinite(p.rot) ? p.rot % 360 : 0,
+        back: p.back === true,
       }));
   } catch {
     // Corrupt setting: start without stickers.
@@ -122,6 +125,14 @@ export function updateSticker(id: string, patch: Partial<Pick<PlacedSticker, 'x'
 export function removeSticker(id: string) {
   stickers.placed = stickers.placed.filter((p) => p.id !== id);
   if (stickers.selected === id) stickers.selected = null;
+  saveSoon();
+}
+
+/** Puts a sticker behind the page's tiles (`back`) or on top of them. */
+export function setStickerBack(id: string, back: boolean) {
+  const s = stickers.placed.find((p) => p.id === id);
+  if (!s) return;
+  s.back = back;
   saveSoon();
 }
 

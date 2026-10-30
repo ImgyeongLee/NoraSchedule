@@ -2,7 +2,7 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Commission, CommissionClient, DiaryEntry, Expense, Meal, Memo, MemoGroup, Workout, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
+import type { Routine, Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Commission, CommissionClient, DiaryEntry, Expense, Meal, Memo, MemoGroup, Workout, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
@@ -81,6 +81,21 @@ export function installMock() {
     id, title, group_id: group, parent_id: parent, notes: id === 1 ? 'Ship before Friday' : '', done, due, due_time: id === 1 ? '18:00' : null,
     created_at: now - (id % 5) * 86_400, completed_at: done ? now - (id % 3) * 86_400 : null,
   });
+  const routines: (Routine & { last_made?: string })[] = [
+    { id: 9000, title: '아침에 물 한 잔 마시기', group_id: null, weekdays: [], active: true, created_at: now - 86_400 * 10 },
+    { id: 9001, title: '스트레칭 10분', group_id: 2, weekdays: [1, 3, 5], active: true, created_at: now - 86_400 * 5 },
+  ];
+  /** Same rules as routines.rs: today's copies, once a day; unticked old copies are cleared. */
+  const materialize = () => {
+    const day = today();
+    const wd = parseYmd(day).getDay();
+    for (let i = todos.length - 1; i >= 0; i--) if (todos[i].routine_id && !todos[i].done && todos[i].due! < day) todos.splice(i, 1);
+    for (const r of routines) {
+      if (!r.active || (r.weekdays.length && !r.weekdays.includes(wd)) || (r.last_made ?? '') >= day) continue;
+      todos.push({ ...todo(nextId++, r.title, r.group_id, null, false, day), routine_id: r.id });
+      r.last_made = day;
+    }
+  };
   const todos: Todo[] = [
     todo(1, 'Ship v1.0', 1, null, false, addDays(t, 2)),
     todo(2, 'Fix calendar bugs', 1, 1, true),
@@ -181,7 +196,7 @@ export function installMock() {
     { id: 2008, kind: 'rulebook', title: 'Delta Green', writer: 'Arc Dream', system: 'Delta Green', links: [], image: null, date: null, role: '', pair: '', folder: '', memo: '', created_at: now - 86_400 * 70 },
     { id: 2009, kind: 'wishlist', title: '달빛 아래', writer: '노라', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', folder: '', memo: '', created_at: now - 86_400 * 3 },
     { id: 2004, kind: 'wishlist', title: 'Masks of Nyarlathotep', writer: 'Larry DiTillio', system: 'CoC 7th', links: ['https://example.com/masks'], image: null, date: null, role: '', pair: '', folder: '', memo: 'Long campaign', created_at: now - 86_400 * 10 },
-  ] as Omit<TrpgEntry, 'position' | 'play_count'>[]).map((e) => ({ ...e, position: 0, play_count: e.id === 2001 ? 3 : 0 }));
+  ] as Omit<TrpgEntry, 'position' | 'play_count'>[]).map((e) => ({ ...e, position: 0, play_count: e.id === 2002 ? 2 : 0 }));
   const book = (id: number, title: string, author: string, status: Book['status'], extra: Partial<Book> = {}): Book => ({
     id, title, author, publisher: '', status, image: null, total_pages: 0, current_page: 0, rating: 0,
     started: null, finished: null, review: '', created_at: now - 86_400 * (100 - id + 3000), ...extra,
@@ -272,7 +287,17 @@ export function installMock() {
       case 'add_todo_group': groups.push({ id: nextId, name: a.name, color: a.color }); return nextId++;
       case 'update_todo_group': Object.assign(groups.find((g) => g.id === a.group.id)!, a.group); return null;
       case 'delete_todo_group': groups.splice(groups.findIndex((g) => g.id === a.id), 1); todos.forEach((x) => x.group_id === a.id && (x.group_id = null)); return null;
-      case 'todos': return todos;
+      case 'todos': materialize(); return todos;
+      case 'routines': return routines;
+      case 'save_routine': {
+        const r = a.routine as Routine;
+        if (r.id) { Object.assign(routines.find((x) => x.id === r.id)!, r); todos.forEach((x) => x.routine_id === r.id && !x.done && Object.assign(x, { title: r.title, group_id: r.group_id })); return r.id; }
+        routines.push({ ...r, id: nextId, created_at: now }); return nextId++;
+      }
+      case 'delete_routine': {
+        for (let i = todos.length - 1; i >= 0; i--) if (todos[i].routine_id === a.id && !todos[i].done) todos.splice(i, 1);
+        routines.splice(routines.findIndex((x) => x.id === a.id), 1); return null;
+      }
       case 'add_todo': todos.push({ ...todo(nextId, a.title, a.groupId, a.parentId, false, a.due), due_time: a.due ? a.dueTime : null }); return nextId++;
       case 'update_todo': Object.assign(todos.find((x) => x.id === a.todo.id)!, { title: a.todo.title, notes: a.todo.notes, due: a.todo.due, due_time: a.todo.due_time, group_id: a.todo.group_id }); return null;
       case 'set_todo_done': {
@@ -398,6 +423,8 @@ export function installMock() {
         books.push({ ...a.book, id: nextId, created_at: a.book.created_at || Math.floor(Date.now() / 1000) }); return nextId++;
       }
       case 'delete_book': { const i = books.findIndex((b) => b.id === a.id); return i < 0 ? null : books.splice(i, 1)[0]; }
+      case 'plugin:app|version': return '0.5.0';
+      case 'latest_release': return { version: '0.6.0', url: 'https://github.com/ImgyeongLee/NoraSchedule/releases/tag/v0.6.0' };
       case 'plugin:dialog|save': return '/Users/you/Documents/Nora-backup.nora';
       case 'plugin:dialog|open': return '/Users/you/Documents/Nora-backup.nora';
       case 'export_data':

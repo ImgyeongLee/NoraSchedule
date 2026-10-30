@@ -1,7 +1,7 @@
 <script lang="ts">
   import { slide } from 'svelte/transition';
   import {
-    CalendarClock, ChevronRight, CircleCheck, Circle, ClipboardPaste, Copy, CopyPlus, NotebookPen, Pencil, Plus, Trash,
+    CalendarClock, ChevronRight, CircleCheck, Circle, ClipboardPaste, Copy, CopyPlus, NotebookPen, Pencil, Plus, Repeat, Trash,
   } from '@lucide/svelte';
   import {
     clipboard, copyOnHover, copyTodo, deleteTodoWithUndo, duplicateTodo, pasteAsTodo, pasteOnHover, shortcut, todoTree,
@@ -89,6 +89,7 @@
       aria-label={t('todo.markDone')} />
     <button class="title" ondblclick={() => onedit(todo)} onclick={() => onedit(todo)}>{todo.title}</button>
     <div class="meta">
+      {#if todo.routine_id}<span class="chip routine" title={t('routine.badgeHint')}><Repeat size={12} /> {t('routine.badge')}</span>{/if}
       {#if todo.notes}<span class="chip" title={todo.notes}><NotebookPen size={12} /></span>{/if}
       {#if kids.length}<span class="chip">{kidsDone}/{kids.length}</span>{/if}
       {#if todo.due}
@@ -216,5 +217,9 @@
   }
   .add-child {
     padding: 4px 8px 8px calc(70px + var(--depth) * 30px);
+  }
+  .routine {
+    color: var(--primary);
+    background: var(--primary-soft);
   }
 </style>

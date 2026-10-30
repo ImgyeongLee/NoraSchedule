@@ -8,7 +8,7 @@
   import type { TrpgEntry } from '../lib/api';
   import { colorForName } from '../lib/colors';
   import { today } from '../lib/dates';
-  import { rolesOf } from '../lib/trpgRoles';
+  import { playsOf, rolesOf, totalPlays } from '../lib/trpgRoles';
   import { intlLocale, t } from '../lib/i18n.svelte';
 
   let { entries }: { entries: TrpgEntry[] } = $props();
@@ -22,9 +22,11 @@
   const inScope = $derived(scope ? played.filter((e) => e.date?.startsWith(scope)) : played);
 
   // A session can be both GM and PL (and have HO/PC slots too).
-  const gm = $derived(inScope.filter((e) => rolesOf(e.role).includes('gm')).length);
-  const pl = $derived(inScope.filter((e) => rolesOf(e.role).includes('pl')).length);
-  const noRole = $derived(inScope.filter((e) => !rolesOf(e.role).length).length);
+  // Replays count too: a session played 3 times is 3 sessions (dated on its play date).
+  const sessions = $derived(totalPlays(inScope));
+  const gm = $derived(totalPlays(inScope.filter((e) => rolesOf(e.role).includes('gm'))));
+  const pl = $derived(totalPlays(inScope.filter((e) => rolesOf(e.role).includes('pl'))));
+  const noRole = $derived(totalPlays(inScope.filter((e) => !rolesOf(e.role).length)));
   const wishlist = $derived(entries.filter((e) => e.kind === 'wishlist').length);
   const rulebooks = $derived(entries.filter((e) => e.kind === 'rulebook').length);
   const scenarioBooks = $derived(entries.filter((e) => e.kind === 'scenario_book').length);
@@ -34,16 +36,16 @@
     if (scope) {
       return Array.from({ length: 12 }, (_, m) => {
         const prefix = `${scope}-${String(m + 1).padStart(2, '0')}`;
-        return { label: String(m + 1), value: inScope.filter((e) => e.date?.startsWith(prefix)).length };
+        return { label: String(m + 1), value: totalPlays(inScope.filter((e) => e.date?.startsWith(prefix))) };
       });
     }
-    return [...years].reverse().map((y) => ({ label: y, value: played.filter((e) => e.date?.startsWith(y)).length }));
+    return [...years].reverse().map((y) => ({ label: y, value: totalPlays(played.filter((e) => e.date?.startsWith(y))) }));
   });
 
   /** The most common values of `field`, with how many sessions each has. */
   function top(field: 'system' | 'writer', n = 6) {
     const counts = new Map<string, number>();
-    for (const e of inScope) if (e[field]) counts.set(e[field], (counts.get(e[field]) ?? 0) + 1);
+    for (const e of inScope) if (e[field]) counts.set(e[field], (counts.get(e[field]) ?? 0) + playsOf(e));
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
       .slice(0, n)
@@ -72,7 +74,7 @@
   <div class="stats">
     <StatCard
       label={t('trpg.statSessions')}
-      value={String(inScope.length)}
+      value={String(sessions)}
       sub={busiestMonth?.value ? t('trpg.statBusiest', { m: monthName(Number(busiestMonth.label)), n: busiestMonth.value }) : ''}
       icon={ScrollText}
     />

@@ -13,7 +13,9 @@ mod panel;
 mod reading;
 mod recurrence;
 mod reminders;
+mod routines;
 mod tracker;
+mod updates;
 mod trpg;
 
 use std::path::PathBuf;
@@ -118,6 +120,7 @@ fn main() {
             commands::inspect_backup,
             commands::import_data,
             commands::reset_all_data,
+            commands::latest_release,
             commands::bookmark_folders,
             commands::save_bookmark_folder,
             commands::delete_bookmark_folder,
@@ -169,6 +172,9 @@ fn main() {
             commands::update_todo_group,
             commands::delete_todo_group,
             commands::todos,
+            commands::routines,
+            commands::save_routine,
+            commands::delete_routine,
             commands::add_todo,
             commands::update_todo,
             commands::set_todo_done,

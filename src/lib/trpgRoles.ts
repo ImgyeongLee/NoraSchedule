@@ -21,3 +21,9 @@ export function joinRoles(roles: string[]): string {
 
 /** "gm" → "GM"; HO/PC and custom roles are shown as typed. */
 export const roleLabel = (r: string) => (r === 'gm' || r === 'pl' ? r.toUpperCase() : r);
+
+/** How many times a played session was played: the first time plus any replays (`play_count`). */
+export const playsOf = (e: { play_count: number }) => 1 + Math.max(0, e.play_count || 0);
+
+/** Total plays of a list of played sessions. */
+export const totalPlays = (list: { play_count: number }[]) => list.reduce((sum, e) => sum + playsOf(e), 0);

@@ -65,9 +65,20 @@ CREATE TABLE IF NOT EXISTS todos (
     due          TEXT,
     due_time     TEXT,
     created_at   INTEGER NOT NULL,
-    completed_at INTEGER
+    completed_at INTEGER,
+    routine_id   INTEGER REFERENCES routines(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_todos_parent ON todos(parent_id);
+
+CREATE TABLE IF NOT EXISTS routines (
+    id         INTEGER PRIMARY KEY,
+    title      TEXT    NOT NULL,
+    group_id   INTEGER REFERENCES todo_groups(id) ON DELETE SET NULL,
+    weekdays   TEXT    NOT NULL DEFAULT '[]',
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    last_made  TEXT
+);
 
 CREATE TABLE IF NOT EXISTS memo_groups (
     id       INTEGER PRIMARY KEY,
@@ -388,6 +399,9 @@ pub struct Todo {
     pub due_time: Option<String>,
     pub created_at: i64,
     pub completed_at: Option<i64>,
+    /// The routine this is today's copy of (see `routines.rs`).
+    #[serde(default)]
+    pub routine_id: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -493,16 +507,17 @@ fn todo_from_row(r: &Row) -> DbResult<Todo> {
         due_time: r.get(9)?,
         created_at: r.get(7)?,
         completed_at: r.get(8)?,
+        routine_id: r.get(10)?,
     })
 }
 
 pub struct Db {
-    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs`, `health.rs`, `trpg.rs`, `reading.rs`, `commissions.rs` and `diary.rs`.
+    /// Shared with the `impl Db` blocks in `bookmarks.rs`, `expenses.rs`, `health.rs`, `trpg.rs`, `reading.rs`, `commissions.rs`, `diary.rs` and `routines.rs`.
     pub(crate) conn: Connection,
 }
 
 /// Settings whose JSON values reference stored images (see `referenced_images`).
-const IMAGE_SETTINGS: [&str; 3] = ["home.header", "home.layout", "stickers"];
+const IMAGE_SETTINGS: [&str; 4] = ["home.header", "home.layout", "stickers", "ui.background"];
 
 fn collect_strings(value: &serde_json::Value, out: &mut std::collections::HashSet<String>) {
     match value {
@@ -639,6 +654,12 @@ fn migrate(conn: &Connection) -> DbResult<()> {
             "ALTER TABLE pomodoro_sessions ADD COLUMN focused_secs INTEGER;
              ALTER TABLE pomodoro_sessions ADD COLUMN completed INTEGER NOT NULL DEFAULT 1;",
         )?;
+    }
+    let has_todo_routine = conn
+        .prepare("SELECT 1 FROM pragma_table_info('todos') WHERE name = 'routine_id'")?
+        .exists([])?;
+    if !has_todo_routine {
+        conn.execute_batch("ALTER TABLE todos ADD COLUMN routine_id INTEGER REFERENCES routines(id) ON DELETE SET NULL")?;
     }
     Ok(())
 }
@@ -971,7 +992,7 @@ impl Db {
 
     pub fn todos(&self) -> DbResult<Vec<Todo>> {
         let mut st = self.conn.prepare(
-            "SELECT id, group_id, parent_id, title, notes, done, due, created_at, completed_at, due_time
+            "SELECT id, group_id, parent_id, title, notes, done, due, created_at, completed_at, due_time, routine_id
              FROM todos ORDER BY id",
         )?;
         st.query_map([], todo_from_row)?.collect()

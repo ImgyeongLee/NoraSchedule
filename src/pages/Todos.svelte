@@ -1,6 +1,7 @@
 <script lang="ts">
   import Select from '../components/Select.svelte';
-  import { FolderPlus, Inbox, Layers, PartyPopper, Pencil, Plus, Sparkles, Sun } from '@lucide/svelte';
+  import { FolderPlus, Inbox, Layers, PartyPopper, Pencil, Plus, Repeat, Sparkles, Sun } from '@lucide/svelte';
+  import RoutineManager from '../components/RoutineManager.svelte';
   import TodoItem from './TodoItem.svelte';
   import Modal from '../components/Modal.svelte';
   import ColorPicker from '../components/ColorPicker.svelte';
@@ -15,7 +16,7 @@
   import { data, load, mutate } from '../lib/state.svelte';
   import { t } from '../lib/i18n.svelte';
 
-  type Filter = 'all' | 'today' | 'ungrouped' | number;
+  type Filter = 'all' | 'today' | 'ungrouped' | 'routines' | number;
   let filter = $state<Filter>('all');
   let showDone = $state(true);
   let todos = $state<Todo[]>([]);
@@ -43,7 +44,7 @@
     return map;
   });
   const matches = (t: Todo, f: Filter) =>
-    f === 'all' ? true : f === 'today' ? !!t.due && t.due <= todayStr && !t.done : f === 'ungrouped' ? t.group_id === null : t.group_id === f;
+    f === 'all' || f === 'routines' ? true : f === 'today' ? !!t.due && t.due <= todayStr && !t.done : f === 'ungrouped' ? t.group_id === null : t.group_id === f;
   const roots = $derived(todos.filter((t) => (filter === 'today' ? true : t.parent_id === null) && matches(t, filter)));
   const visible = $derived(roots.filter((t) => showDone || !t.done));
   const doneCount = $derived(roots.filter((t) => t.done).length);
@@ -56,7 +57,9 @@
         ? t('todo.today')
         : filter === 'ungrouped'
           ? t('todo.ungrouped')
-          : (groupMap.get(filter)?.name ?? ''),
+          : filter === 'routines'
+            ? t('routine.title')
+            : (groupMap.get(filter)?.name ?? ''),
   );
 
   /** Group that new and pasted todos go into for the current view. */
@@ -120,6 +123,9 @@
       <button class="group" class:active={filter === 'ungrouped'} onclick={() => (filter = 'ungrouped')}>
         <Inbox size={17} /> <span>{t('todo.ungrouped')}</span> <span class="count">{openCount('ungrouped')}</span>
       </button>
+      <button class="group" class:active={filter === 'routines'} onclick={() => (filter = 'routines')}>
+        <Repeat size={17} /> <span>{t('routine.title')}</span>
+      </button>
     </div>
 
     <div class="label groups-label">{t('todo.groups')}</div>
@@ -141,6 +147,9 @@
   </aside>
 
   <section class="main">
+    {#if filter === 'routines'}
+      <RoutineManager {groups} />
+    {:else}
     <div class="head">
       <div>
         <h2 class="heading">{heading}</h2>
@@ -186,6 +195,7 @@
       {/each}
     </div>
     <p class="faint small hint">{t('todo.tip')}</p>
+    {/if}
   </section>
 </div>
 

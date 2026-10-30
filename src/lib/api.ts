@@ -102,6 +102,19 @@ export interface Todo {
   due_time: string | null;
   created_at: number;
   completed_at: number | null;
+  /** Set on today's copy of a routine. */
+  routine_id?: number | null;
+}
+
+export interface Routine {
+  id: number;
+  title: string;
+  group_id: number | null;
+  /** Days it repeats on, 0 = Sunday … 6 = Saturday; empty means every day. */
+  weekdays: number[];
+  /** Paused routines are kept but not added. */
+  active: boolean;
+  created_at: number;
 }
 
 export interface BookmarkFolder {
@@ -248,7 +261,7 @@ export interface TrpgEntry {
   created_at: number;
   /** Place in the custom (dragged) order of its list; ties are shown A–Z. */
   position: number;
-  /** How many times the user has played from this scenario book (`scenario_book` entries). */
+  /** Times a played session was played again after the first (`played` entries); it counts 1 + this. */
   play_count: number;
 }
 
@@ -381,7 +394,11 @@ export const api = {
   addTodoGroup: (name: string, color: number) => invoke<number>('add_todo_group', { name, color }),
   updateTodoGroup: (group: TodoGroup) => invoke<void>('update_todo_group', { group }),
   deleteTodoGroup: (id: number) => invoke<void>('delete_todo_group', { id }),
+  /** Also adds today's copies of routines (once a day). */
   todos: () => invoke<Todo[]>('todos'),
+  routines: () => invoke<Routine[]>('routines'),
+  saveRoutine: (routine: Routine) => invoke<number>('save_routine', { routine }),
+  deleteRoutine: (id: number) => invoke<void>('delete_routine', { id }),
   addTodo: (groupId: number | null, parentId: number | null, title: string, due: DateStr | null = null, dueTime: string | null = null) =>
     invoke<number>('add_todo', { groupId, parentId, title, due, dueTime }),
   updateTodo: (todo: Todo) => invoke<void>('update_todo', { todo }),
@@ -405,6 +422,9 @@ export const api = {
   /** A blank page (nothing written or chosen) is removed instead of saved. */
   saveDiaryEntry: (entry: DiaryEntry) => invoke<void>('save_diary_entry', { entry }),
   deleteDiaryEntry: (date: DateStr) => invoke<DiaryEntry | null>('delete_diary_entry', { date }),
+
+  /** The newest version published on GitHub, or null if there is none yet. */
+  latestRelease: () => invoke<{ version: string; url: string } | null>('latest_release'),
 
   commissions: () => invoke<Commission[]>('commissions'),
   saveCommission: (commission: Commission) => invoke<number>('save_commission', { commission }),

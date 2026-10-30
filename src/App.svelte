@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { CircleCheck, PanelLeftClose, PanelLeftOpen, Pause, Play, Settings as SettingsIcon, Sticker } from '@lucide/svelte';
+  import { CircleCheck, PanelLeftClose, PanelLeftOpen, Pause, Play, Settings as SettingsIcon, Sticker, Check } from '@lucide/svelte';
   import { api, type TrackerStatus } from './lib/api';
   import { pomodoro, PHASES } from './lib/pomodoro.svelte';
   import { data, initSidebar, initTheme, setSidebarCollapsed, toast, ui } from './lib/state.svelte';
@@ -21,12 +21,17 @@
   import { initZoom, stepZoom } from './lib/window.svelte';
   import StickerLayer from './components/StickerLayer.svelte';
   import { loadStickers, setDecorating, stickers } from './lib/stickers.svelte';
+  import { background, loadBackground } from './lib/background.svelte';
+  import { checkForUpdates, loadUpdates } from './lib/updates.svelte';
+  import { imageUrl } from './lib/images';
   import { loadCalPrefs } from './lib/calPrefs.svelte';
   import Home from './pages/Home.svelte';
   import Calendar from './pages/Calendar.svelte';
   import DDays from './pages/DDays.svelte';
   import Todos from './pages/Todos.svelte';
   import Pomodoro from './pages/Pomodoro.svelte';
+  import TimerPage from './pages/Timer.svelte';
+  import { timer } from './lib/timer.svelte';
   import Memos from './pages/Memos.svelte';
   import Diary from './pages/Diary.svelte';
   import Tracking from './pages/Tracking.svelte';
@@ -59,6 +64,9 @@
     pomodoro.load();
     refreshTags();
     loadStickers();
+    loadBackground();
+    // A few seconds after start, so it never slows down opening the app.
+    loadUpdates().then(() => setTimeout(() => checkForUpdates(), 5000));
     loadCalPrefs();
     initReminders();
     // Changes made in the overlay panel reload here, and its links open pages here.
@@ -234,6 +242,33 @@
       </button>
     {/if}
 
+    {#if timer.running || timer.finished}
+      <!-- The countdown timer keeps going on other pages; this shows it and rings with it. -->
+      <button
+        class="mini-timer"
+        class:ringing={timer.finished}
+        onclick={() => (ui.page = 'timer')}
+        transition:fade={{ duration: 150 }}
+        title={collapsed ? `${t('nav.timer')} · ${timer.text}` : undefined}
+      >
+        <span class="mini-dot" style:background={timer.finished ? 'var(--success)' : 'var(--primary)'}></span>
+        <span class="mini-time tabular">{timer.text}</span>
+        {#if !collapsed}
+          <span class="muted small truncate">{timer.finished ? t('timer.finished') : t('nav.timer')}</span>
+          <span
+            class="mini-toggle"
+            role="button"
+            tabindex="0"
+            aria-label={timer.finished ? t('timer.done') : t('common.pause')}
+            onclick={(e) => { e.stopPropagation(); if (timer.finished) timer.done(); else timer.toggle(); }}
+            onkeydown={(e) => e.key === 'Enter' && (timer.finished ? timer.done() : timer.toggle())}
+          >
+            {#if timer.finished}<Check size={14} />{:else if timer.running}<Pause size={14} />{:else}<Play size={14} />{/if}
+          </span>
+        {/if}
+      </button>
+    {/if}
+
     {#if tracker}
       {@const s = trackState(tracker.state)}
       <button class="tracker-pill" onclick={() => (ui.page = 'tracking')} title={collapsed ? `${s.label} — ${s.hint}` : s.hint}>
@@ -279,6 +314,14 @@
   </aside>
 
   <main>
+    {#if background.image}
+      <!-- The user's background picture, under a veil of the theme color so text stays readable. -->
+      <div class="app-bg" aria-hidden="true">
+        <div class="app-bg-img" style:background-image="url('{imageUrl(background.image)}')" style:filter={background.blur ? `blur(${background.blur}px)` : undefined}></div>
+        <div class="app-bg-veil" style:opacity={background.veil / 100}></div>
+      </div>
+    {/if}
+    <StickerLayer page={ui.page} layer="back" />
     <div class="drag-top" data-tauri-drag-region></div>
     {#key ui.page}
       <div class="page-host" in:fly={{ y: 8, duration: 220 }}>
@@ -287,6 +330,7 @@
         {:else if ui.page === 'ddays'}<DDays />
         {:else if ui.page === 'todos'}<Todos />
         {:else if ui.page === 'pomodoro'}<Pomodoro />
+        {:else if ui.page === 'timer'}<TimerPage />
         {:else if ui.page === 'memos'}<Memos />
         {:else if ui.page === 'diary'}<Diary />
         {:else if ui.page === 'tracking'}<Tracking />
@@ -541,7 +585,27 @@
     z-index: 5;
   }
   .page-host {
+    position: relative;
+    z-index: 2;
     height: 100%;
+  }
+  .app-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .app-bg-img {
+    position: absolute;
+    /* Overscan so a blurred edge doesn't show the color underneath. */
+    inset: -40px;
+    background: center / cover no-repeat;
+  }
+  .app-bg-veil {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
   }
   .toast-action {
     margin-left: 12px;
@@ -575,5 +639,13 @@
   .toast.success {
     background: var(--success);
     color: #fff;
+  }
+  .mini-timer.ringing {
+    animation: ring-pulse 1s ease-in-out infinite;
+  }
+  @keyframes ring-pulse {
+    50% {
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 30%, transparent);
+    }
   }
 </style>

@@ -19,7 +19,7 @@
   import { t, type Key } from '../lib/i18n.svelte';
   import { openMenu, type MenuItem } from '../lib/menu.svelte';
   import { hideHoverCard, showNoteCard } from '../lib/hovercard.svelte';
-  import { joinRoles, ROLE_PRESETS, roleLabel, rolesOf } from '../lib/trpgRoles';
+  import { joinRoles, playsOf, ROLE_PRESETS, roleLabel, rolesOf, totalPlays } from '../lib/trpgRoles';
   import { data, load, mutate, toast } from '../lib/state.svelte';
 
   type Tab = 'sessions' | 'rulebook' | 'scenario_book' | 'report';
@@ -174,9 +174,9 @@
     editing = { ...e, links: [...e.links] };
   }
 
-  /** Counts one more play from a scenario book. */
+  /** Counts one more play of a played session (it then counts 1 + replays). */
   function playedAgain(e: TrpgEntry) {
-    mutate(api.saveTrpgEntry({ ...e, play_count: e.play_count + 1 }), t('trpg.playedAgainDone', { name: e.title, n: e.play_count + 1 }));
+    mutate(api.saveTrpgEntry({ ...e, play_count: e.play_count + 1 }), t('trpg.playedAgainDone', { name: e.title, n: playsOf(e) + 1 }));
   }
 
   const MAX_PLAY_COUNT = 999;
@@ -262,7 +262,7 @@
     openMenu(ev, [
       { label: t('common.edit'), icon: Pencil, action: () => edit(e) },
       ...(e.kind === 'wishlist' ? [{ label: t('trpg.markPlayed'), icon: Swords, action: () => markPlayed(e) }] : []),
-      ...(e.kind === 'scenario_book' ? [{ label: t('trpg.playedAgain'), icon: Repeat, action: () => playedAgain(e) }] : []),
+      ...(e.kind === 'played' ? [{ label: t('trpg.playedAgain'), icon: Repeat, action: () => playedAgain(e) }] : []),
       ...(links.length ? ['separator' as const, ...links] : []),
       'separator',
       { label: t('common.delete'), icon: Trash, danger: true, action: () => remove(e) },
@@ -345,10 +345,7 @@
           onmenu={entryMenu}
           onreorder={canReorder ? reorderBooks : undefined}
         >
-          {#snippet meta(b)}
-            {#if b.play_count > 0}<span class="plays" title={t('trpg.playsHint', { n: b.play_count })}><Repeat size={11} /> {t('trpg.playCount', { n: b.play_count })}</span>{/if}
-            {[b.system, b.writer].filter(Boolean).join(' · ')}
-          {/snippet}
+          {#snippet meta(b)}{[b.system, b.writer].filter(Boolean).join(' · ')}{/snippet}
           {#snippet trailing(b)}
             {#if b.links.length}<span class="faint small row-links"><ExternalLink size={13} /> {b.links.length}</span>{/if}
           {/snippet}
@@ -374,7 +371,7 @@
         <span class="chev" class:closed={!expanded}><ChevronDown size={15} /></span>
         <span class="strong truncate">{group.label}</span>
         <span class="spacer"></span>
-        <span class="muted small">{t('trpg.times', { n: group.items.length })}</span>
+        <span class="muted small">{t('trpg.times', { n: kind === 'played' ? totalPlays(group.items) : group.items.length })}</span>
       </button>
       {#if expanded}
         {#each group.items as e (e.id)}{@render session(e)}{/each}
@@ -397,6 +394,9 @@
         <span class="entry-title truncate">{e.title}</span>
         {#if e.writer || e.system}<span class="muted small truncate">{[e.writer, e.system].filter(Boolean).join(' · ')}</span>{/if}
       </span>
+      {#if e.kind === 'played' && e.play_count > 0}
+        <span class="plays" title={t('trpg.playsHint', { n: playsOf(e) })}><Repeat size={11} /> {t('trpg.playCount', { n: playsOf(e) })}</span>
+      {/if}
       {#if e.role}
         <span class="roles">
           {#each rolesOf(e.role) as r (r)}<span class="role {r === 'gm' || r === 'pl' ? r : 'slot'}">{roleLabel(r)}</span>{/each}
@@ -491,26 +491,27 @@
         <label for="trpg-date">{t('trpg.date')} <span class="faint small">{t('trpg.optional')}</span></label>
         <DateField id="trpg-date" value={editing.date} clearable onchange={(v) => editing && (editing.date = v)} />
       </div>
-    {/if}
-    {#if editing.kind === 'scenario_book'}
       <div class="field">
-        <label for="trpg-plays">{t('trpg.playCountLabel')}</label>
-        <div class="stepper">
-          <button type="button" onclick={() => editing && setPlayCount(editing.play_count - 1)} disabled={editing.play_count <= 0} aria-label={t('pomo.decrease')}><Minus size={14} /></button>
-          <input
-            id="trpg-plays"
-            class="tabular"
-            type="number"
-            inputmode="numeric"
-            min="0"
-            max={MAX_PLAY_COUNT}
-            value={editing.play_count}
-            oninput={(e) => setPlayCount(Number(e.currentTarget.value))}
-          />
-          <span class="unit">{t('trpg.playUnit')}</span>
-          <button type="button" onclick={() => editing && setPlayCount(editing.play_count + 1)} aria-label={t('pomo.increase')}><Plus size={14} /></button>
+        <label for="trpg-plays">{t('trpg.extraPlays')}</label>
+        <div class="plays-row">
+          <div class="stepper">
+            <button type="button" onclick={() => editing && setPlayCount(editing.play_count - 1)} disabled={editing.play_count <= 0} aria-label={t('pomo.decrease')}><Minus size={14} /></button>
+            <span class="plus-sign">+</span>
+            <input
+              id="trpg-plays"
+              class="tabular"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              max={MAX_PLAY_COUNT}
+              value={editing.play_count}
+              oninput={(e) => setPlayCount(Number(e.currentTarget.value))}
+            />
+            <button type="button" onclick={() => editing && setPlayCount(editing.play_count + 1)} aria-label={t('pomo.increase')}><Plus size={14} /></button>
+          </div>
+          <span class="muted small">{t('trpg.extraPlaysTotal', { n: playsOf(editing) })}</span>
         </div>
-        <span class="faint small">{t('trpg.playCountHint')}</span>
+        <span class="faint small">{t('trpg.extraPlaysHint')}</span>
       </div>
     {/if}
     {#if isBook(editing.kind)}
@@ -596,9 +597,14 @@
     opacity: 0.35;
     cursor: default;
   }
-  .stepper .unit {
-    margin-right: 4px;
-    font-size: 13px;
+  .plays-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .plus-sign {
+    margin-left: 4px;
+    font-weight: 700;
     color: var(--muted);
   }
   .stepper input {

@@ -1,7 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getVersion } from '@tauri-apps/api/app';
+  import { openUrl } from '@tauri-apps/plugin-opener';
+  import { UPDATES_URL } from '../lib/links';
+  import { background, saveBackground } from '../lib/background.svelte';
+  import { checkForUpdates, openReleasePage, setAutoCheck, updates } from '../lib/updates.svelte';
+  import { imageUrl, importImageFile } from '../lib/images';
   import {
-    AppWindow, ArrowDown, ArrowUp, Check, Database, GripVertical, PanelsTopLeft, RotateCcw, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
+    AppWindow, ArrowDown, ArrowUp, Megaphone, Sparkles, Wallpaper, ImagePlus, RefreshCw, Trash2, Check, Database, GripVertical, PanelsTopLeft, RotateCcw, Download, Expand, Info, Languages, LoaderCircle, Monitor, Moon, Palette, Plus, Sun, SwatchBook,
     CalendarDays, PanelRight, Pipette, Trash, TriangleAlert, Upload, X, ZoomIn,
   } from '@lucide/svelte';
   import { calPrefs, setCalPrefs } from '../lib/calPrefs.svelte';
@@ -152,6 +158,29 @@
     }
     restarting = false;
   }
+
+  // ---- background image
+  let bgInput: HTMLInputElement;
+  let bgBusy = $state(false);
+  async function useBackground(file: File | undefined) {
+    if (!file) return;
+    bgBusy = true;
+    try {
+      background.image = await importImageFile(file);
+      saveBackground();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), 'error');
+    } finally {
+      bgBusy = false;
+      bgInput.value = '';
+    }
+  }
+
+  /** The app's own version (from tauri.conf.json), shown under About. */
+  let appVersion = $state('');
+  onMount(() => {
+    getVersion().then((v) => (appVersion = v)).catch(() => {});
+  });
 </script>
 
 <svelte:window onresize={() => (size = currentSize())} />
@@ -274,6 +303,45 @@
           </div>
         </div>
       {/if}
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div class="icon"><Wallpaper size={18} /></div>
+        <div>
+          <h2>{t('set.background')}</h2>
+          <p class="muted small">{t('set.backgroundBody')}</p>
+        </div>
+      </div>
+      <input bind:this={bgInput} type="file" accept="image/*" hidden onchange={(e) => useBackground(e.currentTarget.files?.[0])} />
+      <div class="bg-row">
+        <button class="bg-thumb" onclick={() => bgInput.click()} disabled={bgBusy} title={t('set.backgroundPick')}
+          style:background-image={background.image ? `url('${imageUrl(background.image)}')` : undefined}>
+          {#if bgBusy}<span class="spin"><LoaderCircle size={20} /></span>{:else if !background.image}<ImagePlus size={22} />{/if}
+        </button>
+        <div class="bg-controls">
+          <div class="bg-buttons">
+            <button class="btn small" onclick={() => bgInput.click()} disabled={bgBusy}>
+              {#if background.image}<RefreshCw size={14} /> {t('dd.changePhoto')}{:else}<ImagePlus size={14} /> {t('set.backgroundPick')}{/if}
+            </button>
+            {#if background.image}
+              <button class="btn small ghost" onclick={() => { background.image = null; saveBackground(); }}><Trash2 size={14} /> {t('dd.removePhoto')}</button>
+            {/if}
+          </div>
+          {#if background.image}
+            <label class="bg-slider">
+              <span class="small">{t('set.backgroundVeil')}</span>
+              <input type="range" min="0" max="90" step="5" bind:value={background.veil} oninput={saveBackground} />
+              <span class="faint small tabular">{background.veil}%</span>
+            </label>
+            <label class="bg-slider">
+              <span class="small">{t('set.backgroundBlur')}</span>
+              <input type="range" min="0" max="20" step="1" bind:value={background.blur} oninput={saveBackground} />
+              <span class="faint small tabular">{background.blur}px</span>
+            </label>
+          {/if}
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -515,8 +583,31 @@
         <div class="icon"><Info size={18} /></div>
         <div>
           <h2>{t('set.about')}</h2>
-          <p class="muted small">{t('set.aboutBody', { v: 'v0.1.0' })}</p>
+          <p class="muted small">{t('set.version', { v: appVersion || '…' })} · {t('set.aboutBody')}</p>
         </div>
+        <span class="spacer"></span>
+        <button class="btn" onclick={() => openUrl(UPDATES_URL).catch((e) => toast(String(e), 'error'))} title={UPDATES_URL}>
+          <Megaphone size={16} /> {t('set.updates')}
+        </button>
+      </div>
+      <p class="faint small updates-hint">{t('set.updatesHint')}</p>
+      <div class="version-check">
+        <span class="vc-status small" class:newer={updates.status === 'newer'}>
+          {#if updates.status === 'checking'}<span class="spin"><LoaderCircle size={14} /></span> {t('upd.checking')}
+          {:else if updates.status === 'newer'}<Sparkles size={14} /> {t('upd.available', { v: updates.latest ?? '' })}
+          {:else if updates.status === 'latest'}<Check size={14} /> {t('upd.upToDate')}
+          {:else if updates.status === 'failed'}{t('upd.failed')}
+          {:else}{t('upd.notChecked')}{/if}
+        </span>
+        {#if updates.status === 'newer'}
+          <button class="btn small primary" onclick={openReleasePage}>{t('upd.see')}</button>
+        {/if}
+        <button class="btn small" onclick={() => checkForUpdates(true)} disabled={updates.status === 'checking'}>{t('upd.checkNow')}</button>
+        <span class="spacer"></span>
+        <label class="row vc-auto small">
+          <input type="checkbox" class="switch" checked={updates.auto} onchange={(e) => setAutoCheck(e.currentTarget.checked)} />
+          {t('upd.auto')}
+        </label>
       </div>
     </section>
   </div>
@@ -1165,5 +1256,82 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  .updates-hint {
+    margin: 8px 0 0;
+  }
+  .bg-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-top: 14px;
+  }
+  .bg-thumb {
+    width: 160px;
+    height: 100px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-2) center / cover no-repeat;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .bg-thumb:hover {
+    border-color: var(--primary);
+  }
+  .bg-controls {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .bg-buttons {
+    display: flex;
+    gap: 6px;
+  }
+  .bg-slider {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 10px;
+  }
+  .bg-slider input {
+    accent-color: var(--primary);
+  }
+  .spin {
+    display: grid;
+    animation: bg-spin 1s linear infinite;
+  }
+  @keyframes bg-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .version-check {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .vc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .vc-status.newer {
+    color: var(--primary);
+  }
+  .vc-auto {
+    gap: 8px;
+    color: var(--muted);
+    cursor: pointer;
   }
 </style>

@@ -11,6 +11,7 @@ use crate::bookmarks::{Bookmark, BookmarkFolder};
 use crate::commissions::{Commission, CommissionClient};
 use crate::diary::DiaryEntry;
 use crate::expenses::Expense;
+use crate::routines::Routine;
 use crate::health::{self, Meal, Workout};
 use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, MemoGroup, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
@@ -202,7 +203,30 @@ pub fn delete_todo_group(state: State<AppState>, id: i64) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn todos(state: State<AppState>) -> CmdResult<Vec<Todo>> {
-    with_db(&state, |db| db.todos())
+    // Today's routines are added the first time todos are read each day.
+    with_db(&state, |db| {
+        db.materialize_routines(chrono::Local::now().date_naive())?;
+        db.todos()
+    })
+}
+
+#[tauri::command]
+pub fn routines(state: State<AppState>) -> CmdResult<Vec<Routine>> {
+    with_db(&state, |db| db.routines())
+}
+
+#[tauri::command]
+pub fn save_routine(state: State<AppState>, routine: Routine) -> CmdResult<i64> {
+    let title = routine.title.trim();
+    if title.is_empty() {
+        return Err("title required".into());
+    }
+    with_db(&state, |db| db.save_routine(&Routine { title: title.into(), ..routine }))
+}
+
+#[tauri::command]
+pub fn delete_routine(state: State<AppState>, id: i64) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_routine(id))
 }
 
 #[tauri::command]
@@ -411,8 +435,8 @@ pub fn save_trpg_entry(state: State<AppState>, entry: TrpgEntry) -> CmdResult<i6
         system: entry.system.trim().into(),
         memo: entry.memo.trim().into(),
         image: entry.image.filter(|name| crate::images::is_safe_name(name)),
-        // Only scenario books keep a play count.
-        play_count: if entry.kind == "scenario_book" { entry.play_count.clamp(0, TrpgEntry::MAX_PLAY_COUNT) } else { 0 },
+        // Only played sessions keep a count of replays.
+        play_count: if entry.kind == "played" { entry.play_count.clamp(0, TrpgEntry::MAX_PLAY_COUNT) } else { 0 },
         ..entry
     };
     let id = with_db(&state, |db| db.save_trpg_entry(&entry))?;
@@ -654,6 +678,12 @@ pub fn inspect_backup(path: String) -> CmdResult<Manifest> {
 pub fn import_data(app: tauri::AppHandle, state: State<AppState>, path: String) -> CmdResult<()> {
     backup::stage_import(std::path::Path::new(&path), &state.data_dir)?;
     app.restart()
+}
+
+/// The newest version published on GitHub (for the "new version available" notice).
+#[tauri::command]
+pub async fn latest_release() -> CmdResult<Option<crate::updates::LatestRelease>> {
+    crate::updates::latest_release().await
 }
 
 /// Deletes all data, then restarts the app with a fresh start.

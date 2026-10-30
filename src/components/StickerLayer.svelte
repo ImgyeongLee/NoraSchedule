@@ -1,24 +1,30 @@
 <script lang="ts">
-  // Stickers for the current page, drawn over its content. Outside decorate mode the whole
-  // layer ignores the mouse, so the page underneath works exactly as without stickers.
+  // Stickers for the current page. Two layers are used: `front` over the page content and `back`
+  // under it (behind tiles and cards). Outside decorate mode both ignore the mouse, so the page works
+  // exactly as without stickers. While decorating, every sticker is shown in the front layer so it
+  // can be moved; ones that live at the back are marked.
   import { fade, fly } from 'svelte/transition';
-  import { BringToFront, Check, ImagePlus, LoaderCircle, MoveDiagonal2, RotateCw, Trash, X } from '@lucide/svelte';
+  import { ArrowDownToLine, ArrowUpToLine, BringToFront, Check, ImagePlus, LoaderCircle, MoveDiagonal2, RotateCw, Trash, X } from '@lucide/svelte';
   import { imageUrl } from '../lib/images';
   import { t } from '../lib/i18n.svelte';
   import type { Page } from '../lib/state.svelte';
   import { toast } from '../lib/state.svelte';
   import {
-    bringToFront, deleteFromLibrary, placeSticker, removeSticker, setDecorating, stickers, updateSticker, uploadSticker,
+    bringToFront, deleteFromLibrary, placeSticker, removeSticker, setDecorating, setStickerBack, stickers, updateSticker, uploadSticker,
     type PlacedSticker,
   } from '../lib/stickers.svelte';
 
-  let { page }: { page: Page } = $props();
+  let { page, layer: which = 'front' }: { page: Page; layer?: 'front' | 'back' } = $props();
 
   let layer: HTMLDivElement;
-  let input: HTMLInputElement;
+  let input = $state<HTMLInputElement>();
   let uploading = $state(false);
   let confirmDelete = $state<string | null>(null);
-  const onPage = $derived(stickers.placed.filter((s) => s.page === page));
+  const onPage = $derived(
+    stickers.placed.filter(
+      (s) => s.page === page && (which === 'back' ? !stickers.editing && s.back : stickers.editing || !s.back),
+    ),
+  );
 
   type Gesture = { kind: 'move' | 'resize' | 'rotate'; id: string; dx: number; dy: number };
   let gesture: Gesture | null = null;
@@ -61,7 +67,7 @@
       toast(e instanceof Error ? e.message : String(e), 'error');
     } finally {
       uploading = false;
-      input.value = '';
+      if (input) input.value = '';
     }
   }
 
@@ -74,19 +80,22 @@
 </script>
 
 <svelte:window
-  {onkeydown}
+  onkeydown={(e) => which === 'front' && onkeydown(e)}
   onpointerdown={(e) => {
     // Clicking anywhere but a sticker or the tray deselects.
-    if (stickers.editing && !(e.target as Element).closest?.('.sticker, .tray')) stickers.selected = null;
+    if (which === 'front' && stickers.editing && !(e.target as Element).closest?.('.sticker, .tray')) stickers.selected = null;
   }}
 />
-<input bind:this={input} type="file" accept="image/*" hidden onchange={(e) => upload(e.currentTarget.files?.[0])} />
+{#if which === 'front'}
+  <input bind:this={input} type="file" accept="image/*" hidden onchange={(e) => upload(e.currentTarget.files?.[0])} />
+{/if}
 
-<div class="sticker-layer" class:editing={stickers.editing} bind:this={layer} aria-hidden={!stickers.editing}>
+<div class="sticker-layer {which}" class:editing={stickers.editing} bind:this={layer} aria-hidden={!stickers.editing || which === 'back'}>
   {#each onPage as s (s.id)}
     {@const selected = stickers.editing && stickers.selected === s.id}
     <div
       class="sticker"
+      class:at-back={stickers.editing && s.back}
       class:selected
       style:left="{s.x * 100}%"
       style:top="{s.y * 100}%"
@@ -106,6 +115,13 @@
       {#if selected}
         <button class="handle del" onpointerdown={(e) => e.stopPropagation()} onclick={() => removeSticker(s.id)} title={t('sticker.remove')}><X size={13} /></button>
         <button class="handle front" onpointerdown={(e) => e.stopPropagation()} onclick={() => bringToFront(s.id)} title={t('sticker.front')}><BringToFront size={13} /></button>
+        <button
+          class="handle layer-toggle"
+          onpointerdown={(e) => e.stopPropagation()}
+          onclick={() => setStickerBack(s.id, !s.back)}
+          title={s.back ? t('sticker.toFrontLayer') : t('sticker.toBackLayer')}
+          aria-label={s.back ? t('sticker.toFrontLayer') : t('sticker.toBackLayer')}
+        >{#if s.back}<ArrowUpToLine size={13} />{:else}<ArrowDownToLine size={13} />{/if}</button>
         <span
           class="handle rot"
           onpointerdown={(e) => start(e, s, 'rotate')}
@@ -127,7 +143,7 @@
   {/each}
 </div>
 
-{#if stickers.editing}
+{#if stickers.editing && which === 'front'}
   <!-- Clicking an empty spot deselects; the page itself stays usable while decorating. -->
   <div class="tray card" transition:fly={{ y: 20, duration: 180 }}>
     <div class="tray-head">
@@ -137,7 +153,7 @@
       <button class="btn primary small" onclick={() => setDecorating(false)}><Check size={15} /> {t('home.done')}</button>
     </div>
     <div class="library">
-      <button class="add" onclick={() => input.click()} disabled={uploading} title={t('sticker.upload')}>
+      <button class="add" onclick={() => input?.click()} disabled={uploading} title={t('sticker.upload')}>
         {#if uploading}<span class="spin"><LoaderCircle size={20} /></span>{:else}<ImagePlus size={20} />{/if}
       </button>
       {#each stickers.library as image (image)}
@@ -314,5 +330,22 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  /* Behind the page: under the tiles and cards (see App.svelte). */
+  .sticker-layer.back {
+    z-index: 1;
+  }
+  .sticker.at-back img {
+    opacity: 0.7;
+  }
+  .sticker.at-back {
+    outline: 1.5px dashed color-mix(in srgb, var(--text) 35%, transparent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .layer-toggle {
+    top: 50%;
+    left: -16px;
+    transform: translateY(-50%);
   }
 </style>
