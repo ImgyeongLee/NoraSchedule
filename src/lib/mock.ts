@@ -423,8 +423,8 @@ export function installMock() {
         books.push({ ...a.book, id: nextId, created_at: a.book.created_at || Math.floor(Date.now() / 1000) }); return nextId++;
       }
       case 'delete_book': { const i = books.findIndex((b) => b.id === a.id); return i < 0 ? null : books.splice(i, 1)[0]; }
-      case 'plugin:app|version': return '0.5.0';
-      case 'latest_release': return { version: '0.6.0', url: 'https://github.com/ImgyeongLee/NoraSchedule/releases/tag/v0.6.0' };
+      case 'plugin:app|version': return '0.6.0';
+      case 'latest_release': return { version: '0.7.0', url: 'https://github.com/ImgyeongLee/NoraSchedule/releases/tag/v0.7.0' };
       case 'plugin:dialog|save': return '/Users/you/Documents/Nora-backup.nora';
       case 'plugin:dialog|open': return '/Users/you/Documents/Nora-backup.nora';
       case 'export_data':
