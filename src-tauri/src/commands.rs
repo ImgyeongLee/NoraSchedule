@@ -504,6 +504,9 @@ pub fn save_expense(state: State<AppState>, expense: Expense) -> CmdResult<i64> 
     if !expense.amount.is_finite() || expense.amount <= 0.0 {
         return Err("invalid_amount".into());
     }
+    if !Expense::KINDS.contains(&expense.kind.as_str()) {
+        return Err("invalid expense".into());
+    }
     with_db(&state, |db| db.save_expense(&expense))
 }
 
@@ -540,6 +543,10 @@ pub fn save_commission(state: State<AppState>, commission: Commission) -> CmdRes
             .filter(|p| money(p.amount) > 0.0)
             .collect(),
         revisions: commission.revisions.clamp(0, 999),
+        platform: commission.platform.trim().chars().take(40).collect(),
+        fee_kind: if Commission::FEE_KINDS.contains(&commission.fee_kind.as_str()) { commission.fee_kind.clone() } else { "percent".into() },
+        // A percentage can't pass 100; a fixed fee can't be negative.
+        fee: if commission.fee_kind == "amount" { money(commission.fee) } else { money(commission.fee).min(100.0) },
         image: commission.image.filter(|name| crate::images::is_safe_name(name)),
         ..commission
     };

@@ -15,7 +15,8 @@
   import StatCard from '../components/StatCard.svelte';
   import { api, type Commission, type CommissionClient, type CommissionStatus } from '../lib/api';
   import {
-    KIND_PRESETS, STAGES, byDeadline, byDelivered, commissionFocus, daysLeft, nextStage, paidOf, payState, stageOf, unpaidOf,
+    KIND_PRESETS, PLATFORM_PRESETS, STAGES, byDeadline, byDelivered, commissionFocus, daysLeft, feeOf, netOf, netPayment, nextStage, paidOf,
+    payState, stageOf, unpaidOf,
   } from '../lib/commissions.svelte';
   import { fmt, today } from '../lib/dates';
   import { currencySymbol, expenseSettings, fmtMoney, loadExpenseSettings } from '../lib/expenses.svelte';
@@ -103,8 +104,11 @@
   const thisMonth = $derived(todayStr.slice(0, 7));
   const open = $derived(commissions.filter((c) => c.status !== 'inquiry' && c.status !== 'done'));
   const inquiries = $derived(commissions.filter((c) => c.status === 'inquiry').length);
-  const monthPayments = $derived(commissions.flatMap((c) => c.payments).filter((p) => p.date.startsWith(thisMonth)));
-  const monthIncome = $derived(monthPayments.reduce((s, p) => s + p.amount, 0));
+  const monthPayments = $derived(
+    commissions.flatMap((c) => c.payments.map((p) => ({ ...p, net: netPayment(c, p.amount) }))).filter((p) => p.date.startsWith(thisMonth)),
+  );
+  /** What actually came in this month, after platform fees. */
+  const monthIncome = $derived(monthPayments.reduce((s, p) => s + p.net, 0));
   /** Accepted work only: an inquiry has no agreed price yet. */
   const owing = $derived(commissions.filter((c) => c.status !== 'inquiry' && unpaidOf(c) > 0));
   const unpaidTotal = $derived(owing.reduce((s, c) => s + unpaidOf(c), 0));
@@ -193,7 +197,7 @@
   function blank(status: CommissionStatus = 'inquiry'): Commission {
     return {
       id: 0, title: '', client_id: null, kind: '', status, price: 0, payments: [], deadline: null, revisions: 0, links: [], image: null,
-      memo: '', created_at: 0, delivered: null,
+      memo: '', created_at: 0, delivered: null, platform: '', fee_kind: 'percent', fee: 0,
     };
   }
 
@@ -204,6 +208,20 @@
     payDate = today();
     clientText = clientName(c);
     editing = { ...c, payments: [...c.payments], links: [...c.links] };
+  }
+
+  /** Platforms used so far plus common ones, offered while typing. */
+  const platforms = $derived([...new Set([...commissions.map((c) => c.platform).filter(Boolean), ...PLATFORM_PRESETS])]);
+
+  /** Picking a platform used before brings back its fee (each site takes its own cut). */
+  function setPlatform(name: string) {
+    if (!editing) return;
+    editing.platform = name;
+    const before = commissions.filter((c) => c.platform.trim() === name.trim() && c.id !== editing!.id && c.fee > 0).sort((a, b) => b.created_at - a.created_at)[0];
+    if (before && !(Number(editing.fee) > 0)) {
+      editing.fee = before.fee;
+      editing.fee_kind = before.fee_kind;
+    }
   }
 
   /** Kinds used so far plus the common ones, offered while typing. */
@@ -324,7 +342,7 @@
     <StatCard
       label={t('cm.statIncome')}
       value={fmtMoney(monthIncome)}
-      sub={monthPayments.length ? t('cm.statPayments', { n: monthPayments.length }) : ''}
+      sub={monthPayments.length ? t('cm.statPaymentsNet', { n: monthPayments.length }) : ''}
       icon={Wallet}
       tint="var(--success)"
     />
@@ -539,6 +557,35 @@
           <input id="cm-price" class="tabular" type="number" inputmode="decimal" min="0" step="any" placeholder="0" bind:value={editing.price} />
         </div>
       </div>
+      <div class="fee-row">
+        <div class="field">
+          <label for="cm-platform">{t('cm.platform')}</label>
+          <input id="cm-platform" class="input" list="cm-platforms" placeholder={t('cm.platformPlaceholder')} value={editing.platform}
+            oninput={(e) => setPlatform(e.currentTarget.value)} />
+          <datalist id="cm-platforms">{#each platforms as p (p)}<option value={p}></option>{/each}</datalist>
+        </div>
+        <div class="field">
+          <label for="cm-fee">{t('cm.fee')}</label>
+          <div class="fee-input">
+            <div class="money small-money">
+              {#if editing.fee_kind === 'amount'}<span class="symbol">{currencySymbol()}</span>{/if}
+              <input id="cm-fee" class="tabular" type="number" inputmode="decimal" min="0" step="any" placeholder="0" bind:value={editing.fee} />
+              {#if editing.fee_kind === 'percent'}<span class="symbol">%</span>{/if}
+            </div>
+            <div class="segmented fee-kind">
+              <button type="button" class:active={editing.fee_kind === 'percent'} onclick={() => editing && (editing.fee_kind = 'percent')}>%</button>
+              <button type="button" class:active={editing.fee_kind === 'amount'} onclick={() => editing && (editing.fee_kind = 'amount')}>{currencySymbol()}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {#if Number(editing.price) > 0}
+        <div class="net small">
+          <span class="muted">{t('cm.netLabel')}</span>
+          <span class="net-amount tabular">{fmtMoney(netOf(editing))}</span>
+          {#if feeOf(editing) > 0}<span class="faint">{t('cm.feeAmount', { amount: fmtMoney(feeOf(editing)) })}</span>{/if}
+        </div>
+      {/if}
       <div class="field">
         <span class="label">{t('cm.payments')}</span>
         {#each editing.payments as p, i (i)}
@@ -1080,6 +1127,37 @@
   }
   .small-money input {
     font-size: 14px;
+  }
+  .fee-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+  }
+  .fee-row .input {
+    background: var(--surface);
+  }
+  .fee-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .fee-kind button {
+    min-width: 34px;
+    padding: 0 8px;
+  }
+  .net {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .net-amount {
+    font-size: 16px;
+    font-weight: 750;
+    color: var(--success);
   }
   .pay-row {
     display: flex;

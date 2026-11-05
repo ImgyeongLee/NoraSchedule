@@ -2,33 +2,41 @@
   import Select from '../components/Select.svelte';
   import { onMount } from 'svelte';
   import {
-    CalendarDays, ChevronLeft, ChevronRight, CopyPlus, Pencil, PiggyBank, Plus, Receipt, Settings2, Trash, TrendingDown, TrendingUp, Wallet,
+    Brush, ChevronLeft, ChevronRight, CopyPlus, HandCoins, Pencil, PiggyBank, Plus, Scale, Settings2, Trash, TrendingDown, TrendingUp, Wallet,
   } from '@lucide/svelte';
   import Modal from '../components/Modal.svelte';
   import DateField from '../components/DateField.svelte';
   import StatCard from '../components/StatCard.svelte';
   import BarChart from '../components/BarChart.svelte';
   import ConfirmButton from '../components/ConfirmButton.svelte';
-  import { api, type Expense } from '../lib/api';
+  import { api, type Commission, type Expense, type ExpenseKind } from '../lib/api';
+  import { commissionFocus, netPayment } from '../lib/commissions.svelte';
   import { addMonths, fmt, monthStart, parseYmd, range, today } from '../lib/dates';
   import {
-    CATEGORIES, CURRENCIES, categoryOf, currencySymbol, expenseSettings, fmtMoney, fmtMoneyShort, loadExpenseSettings,
-    saveExpenseSettings,
+    CATEGORIES, CURRENCIES, INCOME_CATEGORIES, categoryOf, currencySymbol, expenseSettings, fmtMoney, fmtMoneyShort,
+    loadExpenseSettings, saveExpenseSettings,
   } from '../lib/expenses.svelte';
   import { t } from '../lib/i18n.svelte';
   import { openMenu } from '../lib/menu.svelte';
-  import { data, load, mutate, toast } from '../lib/state.svelte';
+  import { data, load, mutate, toast, ui } from '../lib/state.svelte';
 
   let month = $state(monthStart(today()));
   let expenses = $state<Expense[]>([]);
   let lastMonth = $state<Expense[]>([]);
   let editing = $state<Expense | null>(null);
   let settingsOpen = $state(false);
-  let settingsForm = $state({ currency: '', budget: '' });
+  let settingsForm = $state({ currency: '', budget: '', linkCommissions: true });
+  let commissions = $state<Commission[]>([]);
 
-  // Quick-add form.
+  // Quick-add form: spending or income.
+  let kind = $state<ExpenseKind>('expense');
   let amount = $state('');
   let category = $state('food');
+  const categoriesFor = (k: ExpenseKind) => (k === 'income' ? INCOME_CATEGORIES : CATEGORIES);
+  function setKind(k: ExpenseKind) {
+    kind = k;
+    category = categoriesFor(k)[0].id;
+  }
   let date = $state(today());
   let note = $state('');
   let amountInput: HTMLInputElement;
@@ -47,35 +55,73 @@
     const prev = addMonths(from, -1);
     const prevEnd = new Date(parseYmd(prev).getFullYear(), parseYmd(prev).getMonth() + 1, 0).getDate();
     load(api.expensesBetween(prev, prev.slice(0, 8) + String(prevEnd).padStart(2, '0')), []).then((e) => (lastMonth = e));
+    load(api.commissions(), []).then((c) => (commissions = c));
   });
 
-  const total = $derived(expenses.reduce((s, x) => s + x.amount, 0));
+  const spending = $derived(expenses.filter((e) => e.kind !== 'income'));
+  const incomes = $derived(expenses.filter((e) => e.kind === 'income'));
+  /**
+   * Payments recorded in the commission manager, shown here as income after platform fees.
+   * They are read from there (not copied), so the two never disagree; edit them over there.
+   */
+  type Linked = { key: string; date: string; amount: number; title: string; id: number };
+  const linked = $derived<Linked[]>(
+    expenseSettings.linkCommissions
+      ? commissions.flatMap((c) =>
+          c.payments
+            .map((p, i) => ({ key: `c${c.id}-${i}`, date: p.date, amount: netPayment(c, p.amount), title: c.title, id: c.id }))
+            .filter((p) => p.date >= month && p.date <= monthEnd && p.amount > 0),
+        )
+      : [],
+  );
+  const linkedTotal = $derived(linked.reduce((s, p) => s + p.amount, 0));
+  const incomeTotal = $derived(incomes.reduce((s, x) => s + x.amount, 0) + linkedTotal);
+  const total = $derived(spending.reduce((s, x) => s + x.amount, 0));
+  const balance = $derived(incomeTotal - total);
   const isCurrentMonth = $derived(month === monthStart(today()));
   const daysSoFar = $derived(isCurrentMonth ? parseYmd(today()).getDate() : daysInMonth);
   // Compare with the same days of last month (e.g. Oct 1–7 vs Sep 1–7), not the whole month.
   const lastMonthSamePeriod = $derived(
-    lastMonth.filter((e) => Number(e.date.slice(8)) <= daysSoFar).reduce((s, x) => s + x.amount, 0),
+    lastMonth.filter((e) => e.kind !== 'income' && Number(e.date.slice(8)) <= daysSoFar).reduce((s, x) => s + x.amount, 0),
   );
   const change = $derived(lastMonthSamePeriod > 0 ? (total - lastMonthSamePeriod) / lastMonthSamePeriod : null);
   const budget = $derived(expenseSettings.budget);
   const budgetUsed = $derived(budget ? total / budget : 0);
 
-  const byCategory = $derived(
-    CATEGORIES.map((c) => ({ ...c, value: expenses.filter((e) => e.category === c.id).reduce((s, e) => s + e.amount, 0) }))
+  /** Which side the category breakdown shows. */
+  let breakdown = $state<ExpenseKind>('expense');
+  const byCategory = $derived.by(() => {
+    const list = breakdown === 'income' ? incomes : spending;
+    const extra = breakdown === 'income' ? linkedTotal : 0;
+    return categoriesFor(breakdown)
+      .map((c) => ({ ...c, value: list.filter((e) => e.category === c.id).reduce((s, e) => s + e.amount, 0) + (c.id === 'commission' ? extra : 0) }))
       .filter((c) => c.value > 0)
-      .sort((a, b) => b.value - a.value),
-  );
+      .sort((a, b) => b.value - a.value);
+  });
+  const breakdownTotal = $derived(breakdown === 'income' ? incomeTotal : total);
   const perDay = $derived(
     range(month, daysInMonth).map((d) => ({
       label: String(Number(d.slice(8))),
-      value: expenses.filter((e) => e.date === d).reduce((s, e) => s + e.amount, 0),
+      value: spending.filter((e) => e.date === d).reduce((s, e) => s + e.amount, 0),
     })),
   );
+  /** History by day, newest first: entries of both kinds plus linked commission payments. */
+  type Row = { type: 'entry'; e: Expense } | { type: 'linked'; p: Linked };
   const groups = $derived.by(() => {
-    const map = new Map<string, Expense[]>();
-    for (const e of expenses) map.set(e.date, [...(map.get(e.date) ?? []), e]);
+    const rows: [string, Row][] = [
+      ...expenses.map((e): [string, Row] => [e.date, { type: 'entry', e }]),
+      ...linked.map((p): [string, Row] => [p.date, { type: 'linked', p }]),
+    ];
+    const map = new Map<string, Row[]>();
+    for (const [date, row] of rows.sort((a, b) => b[0].localeCompare(a[0]))) map.set(date, [...(map.get(date) ?? []), row]);
     return [...map.entries()];
   });
+  const rowAmount = (r: Row) => (r.type === 'linked' ? r.p.amount : r.e.kind === 'income' ? r.e.amount : -r.e.amount);
+
+  function openCommission(id: number) {
+    commissionFocus.id = id;
+    ui.page = 'commissions';
+  }
 
   function pct(n: number) {
     return `${Math.round(n * 100)}%`;
@@ -88,7 +134,10 @@
       amountInput?.focus();
       return;
     }
-    const ok = await mutate(api.saveExpense({ id: 0, amount: value, category, date: date || today(), note: note.trim() }), t('ex.added'));
+    const ok = await mutate(
+      api.saveExpense({ id: 0, amount: value, category, date: date || today(), note: note.trim(), kind }),
+      kind === 'income' ? t('ex.incomeAdded') : t('ex.added'),
+    );
     if (ok !== undefined) {
       amount = '';
       note = '';
@@ -126,12 +175,16 @@
   }
 
   function openSettings() {
-    settingsForm = { currency: expenseSettings.currency, budget: expenseSettings.budget ? String(expenseSettings.budget) : '' };
+    settingsForm = {
+      currency: expenseSettings.currency,
+      budget: expenseSettings.budget ? String(expenseSettings.budget) : '',
+      linkCommissions: expenseSettings.linkCommissions,
+    };
     settingsOpen = true;
   }
 
   async function saveSettings() {
-    await saveExpenseSettings(settingsForm.currency, settingsForm.budget ? Number(settingsForm.budget) : null);
+    await saveExpenseSettings(settingsForm.currency, settingsForm.budget ? Number(settingsForm.budget) : null, settingsForm.linkCommissions);
     settingsOpen = false;
   }
 </script>
@@ -159,7 +212,20 @@
       sub={change === null ? '' : change === 0 ? t('ex.sameAsLast') : t('ex.vsLast', { pct: `${change > 0 ? '+' : ''}${pct(change)}` })}
       icon={change !== null && change > 0 ? TrendingUp : TrendingDown}
     />
-    <StatCard label={t('ex.dailyAvg')} value={fmtMoney(total / Math.max(1, daysSoFar))} icon={CalendarDays} tint="var(--long-break)" />
+    <StatCard
+      label={t('ex.incomeMonth')}
+      value={fmtMoney(incomeTotal)}
+      sub={linkedTotal > 0 ? t('ex.incomeLinked', { amount: fmtMoney(linkedTotal) }) : ''}
+      icon={HandCoins}
+      tint="var(--success)"
+    />
+    <StatCard
+      label={t('ex.balance')}
+      value={`${balance < 0 ? '−' : ''}${fmtMoney(Math.abs(balance))}`}
+      sub={t('ex.balanceSub')}
+      icon={Scale}
+      tint={balance < 0 ? 'var(--danger)' : 'var(--long-break)'}
+    />
     <div class="budget-card">
       {#if budget}
         <StatCard
@@ -178,12 +244,17 @@
         </button>
       {/if}
     </div>
-    <StatCard label={t('ex.entries')} value={String(expenses.length)} icon={Receipt} tint="var(--warning)" />
   </div>
 
   <div class="layout">
-    <div class="card quick">
-      <h3>{t('ex.quickAdd')}</h3>
+    <div class="card quick" class:income={kind === 'income'}>
+      <div class="quick-head">
+        <h3>{kind === 'income' ? t('ex.quickAddIncome') : t('ex.quickAdd')}</h3>
+        <div class="segmented kind-pick">
+          <button class:active={kind === 'expense'} onclick={() => setKind('expense')}>{t('ex.kindExpense')}</button>
+          <button class:active={kind === 'income'} onclick={() => setKind('income')}>{t('ex.kindIncome')}</button>
+        </div>
+      </div>
       <div class="amount-row">
         <span class="symbol">{currencySymbol()}</span>
         <input
@@ -200,7 +271,7 @@
         />
       </div>
       <div class="cats">
-        {#each CATEGORIES as c (c.id)}
+        {#each categoriesFor(kind) as c (c.id)}
           <button type="button" class="cat" class:on={category === c.id} style:--c={c.color} onclick={() => (category = c.id)} title={t(c.label)}>
             <span class="cat-icon"><c.icon size={18} /></span>
             <span class="truncate">{t(c.label)}</span>
@@ -209,14 +280,23 @@
       </div>
       <div class="row">
         <div class="date"><DateField value={date} label={t('common.date')} onchange={(v) => v && (date = v)} /></div>
-        <input class="input" placeholder={t('ex.notePlaceholder')} bind:value={note} onkeydown={(e) => e.key === 'Enter' && add()} />
+        <input class="input" placeholder={kind === 'income' ? t('ex.incomeNotePlaceholder') : t('ex.notePlaceholder')} bind:value={note} onkeydown={(e) => e.key === 'Enter' && add()} />
       </div>
-      <button class="btn primary add-btn" onclick={add}><Plus size={17} /> {t('ex.add')}</button>
+      {#if kind === 'income' && category === 'commission' && expenseSettings.linkCommissions}
+        <p class="faint small link-hint"><Brush size={13} /> {t('ex.commissionHint')}</p>
+      {/if}
+      <button class="btn primary add-btn" onclick={add}><Plus size={17} /> {kind === 'income' ? t('ex.addIncome') : t('ex.add')}</button>
     </div>
 
     <div class="charts">
       <div class="card">
-        <h3>{t('ex.byCategory')}</h3>
+        <div class="card-head">
+          <h3>{t('ex.byCategory')}</h3>
+          <div class="segmented small-seg">
+            <button class:active={breakdown === 'expense'} onclick={() => (breakdown = 'expense')}>{t('ex.kindExpense')}</button>
+            <button class:active={breakdown === 'income'} onclick={() => (breakdown = 'income')}>{t('ex.kindIncome')}</button>
+          </div>
+        </div>
         {#if byCategory.length}
           <div class="cat-list">
             {#each byCategory as c (c.id)}
@@ -225,7 +305,7 @@
                 <span class="cat-name truncate">{t(c.label)}</span>
                 <span class="cat-bar"><span style:width="{(c.value / byCategory[0].value) * 100}%"></span></span>
                 <span class="cat-amount tabular">{fmtMoney(c.value)}</span>
-                <span class="cat-pct faint small">{pct(c.value / total)}</span>
+                <span class="cat-pct faint small">{pct(c.value / breakdownTotal)}</span>
               </div>
             {/each}
           </div>
@@ -243,20 +323,34 @@
   <div class="card history">
     <h3>{t('ex.list')}</h3>
     {#each groups as [day, list] (day)}
+      {@const net = list.reduce((s, r) => s + rowAmount(r), 0)}
       <div class="day-head">
         <span class="strong">{fmt(day, { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-        <span class="muted small tabular">{t('ex.dayTotal', { amount: fmtMoney(list.reduce((s, e) => s + e.amount, 0)) })}</span>
+        <span class="muted small tabular">{t('ex.dayTotal', { amount: `${net > 0 ? '+' : net < 0 ? '−' : ''}${fmtMoney(Math.abs(net))}` })}</span>
       </div>
-      {#each list as e (e.id)}
-        {@const c = categoryOf(e.category)}
-        <button class="expense" style:--c={c.color} onclick={() => (editing = { ...e })} oncontextmenu={(ev) => rowMenu(ev, e)}>
-          <span class="cat-icon"><c.icon size={18} /></span>
-          <span class="exp-text">
-            <span class="strong">{e.note || t(c.label)}</span>
-            {#if e.note}<span class="faint small">{t(c.label)}</span>{/if}
-          </span>
-          <span class="exp-amount tabular">{fmtMoney(e.amount)}</span>
-        </button>
+      {#each list as r (r.type === 'entry' ? `e${r.e.id}` : r.p.key)}
+        {#if r.type === 'entry'}
+          {@const e = r.e}
+          {@const c = categoryOf(e.category)}
+          <button class="expense" class:income={e.kind === 'income'} style:--c={c.color} onclick={() => (editing = { ...e })} oncontextmenu={(ev) => rowMenu(ev, e)}>
+            <span class="cat-icon"><c.icon size={18} /></span>
+            <span class="exp-text">
+              <span class="strong">{e.note || t(c.label)}</span>
+              {#if e.note}<span class="faint small">{t(c.label)}</span>{/if}
+            </span>
+            <span class="exp-amount tabular">{e.kind === 'income' ? '+' : ''}{fmtMoney(e.amount)}</span>
+          </button>
+        {:else}
+          {@const c = categoryOf('commission')}
+          <button class="expense income" style:--c={c.color} onclick={() => openCommission(r.p.id)} title={t('ex.linkedHint')}>
+            <span class="cat-icon"><c.icon size={18} /></span>
+            <span class="exp-text">
+              <span class="strong">{r.p.title}</span>
+              <span class="faint small">{t('ex.linkedLabel')}</span>
+            </span>
+            <span class="exp-amount tabular">+{fmtMoney(r.p.amount)}</span>
+          </button>
+        {/if}
       {/each}
     {:else}
       <div class="empty">
@@ -269,7 +363,16 @@
 </div>
 
 {#if editing}
-  <Modal title={t('ex.edit')} onclose={() => (editing = null)} width={480}>
+  <Modal title={editing.kind === 'income' ? t('ex.editIncome') : t('ex.edit')} onclose={() => (editing = null)} width={480}>
+    <div class="segmented kind-pick">
+      {#each ['expense', 'income'] as ExpenseKind[] as k (k)}
+        <button type="button" class:active={editing.kind === k} onclick={() => {
+          if (!editing || editing.kind === k) return;
+          editing.kind = k;
+          editing.category = categoriesFor(k)[0].id;
+        }}>{k === 'income' ? t('ex.kindIncome') : t('ex.kindExpense')}</button>
+      {/each}
+    </div>
     <div class="field">
       <label for="ex-amount">{t('ex.amount')}</label>
       <div class="amount-row in-modal">
@@ -281,7 +384,7 @@
     <div class="field">
       <span class="label">{t('ex.category')}</span>
       <div class="cats">
-        {#each CATEGORIES as c (c.id)}
+        {#each categoriesFor(editing.kind) as c (c.id)}
           <button type="button" class="cat" class:on={editing.category === c.id} style:--c={c.color} onclick={() => editing && (editing.category = c.id)}>
             <span class="cat-icon"><c.icon size={18} /></span>
             <span class="truncate">{t(c.label)}</span>
@@ -291,7 +394,7 @@
     </div>
     <div class="row">
       <div class="date"><DateField value={editing.date} label={t('common.date')} onchange={(v) => editing && v && (editing.date = v)} /></div>
-      <input class="input" placeholder={t('ex.notePlaceholder')} bind:value={editing.note} />
+      <input class="input" placeholder={editing.kind === 'income' ? t('ex.incomeNotePlaceholder') : t('ex.notePlaceholder')} bind:value={editing.note} />
     </div>
     {#snippet footer()}
       <ConfirmButton onconfirm={() => { const e = editing; editing = null; if (e) remove(e); }} />
@@ -312,6 +415,13 @@
       <label for="ex-budget">{t('ex.budget')}</label>
       <input id="ex-budget" class="input" type="number" min="0" step="any" placeholder={t('ex.budgetPlaceholder')} bind:value={settingsForm.budget} />
     </div>
+    <label class="link-setting">
+      <span>
+        <span class="strong">{t('ex.linkCommissions')}</span>
+        <span class="muted small">{t('ex.linkCommissionsBody')}</span>
+      </span>
+      <input type="checkbox" class="switch" bind:checked={settingsForm.linkCommissions} />
+    </label>
     {#snippet footer()}
       <span class="spacer"></span>
       <button class="btn ghost" onclick={() => (settingsOpen = false)}>{t('common.cancel')}</button>
@@ -564,5 +674,48 @@
     .layout {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+  .quick-head,
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .card-head {
+    margin-bottom: 4px;
+  }
+  .small-seg button {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 12.5px;
+  }
+  .quick.income .amount-row:focus-within {
+    border-color: var(--success);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 18%, transparent);
+  }
+  .quick.income .add-btn {
+    background: var(--success);
+  }
+  .link-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+  }
+  .expense.income .exp-amount {
+    color: var(--success);
+  }
+  .link-setting {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .link-setting > span {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 </style>

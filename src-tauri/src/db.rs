@@ -138,7 +138,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     category   TEXT    NOT NULL,
     date       TEXT    NOT NULL,
     note       TEXT    NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    kind       TEXT    NOT NULL DEFAULT 'expense'
 );
 CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
 
@@ -226,7 +227,10 @@ CREATE TABLE IF NOT EXISTS commissions (
     image      TEXT,
     memo       TEXT    NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
-    delivered  TEXT
+    delivered  TEXT,
+    platform   TEXT    NOT NULL DEFAULT '',
+    fee_kind   TEXT    NOT NULL DEFAULT 'percent',
+    fee        REAL    NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS diary (
@@ -660,6 +664,24 @@ fn migrate(conn: &Connection) -> DbResult<()> {
         .exists([])?;
     if !has_todo_routine {
         conn.execute_batch("ALTER TABLE todos ADD COLUMN routine_id INTEGER REFERENCES routines(id) ON DELETE SET NULL")?;
+    }
+    // Income in the money book.
+    let has_expense_kind = conn
+        .prepare("SELECT 1 FROM pragma_table_info('expenses') WHERE name = 'kind'")?
+        .exists([])?;
+    if !has_expense_kind {
+        conn.execute_batch("ALTER TABLE expenses ADD COLUMN kind TEXT NOT NULL DEFAULT 'expense'")?;
+    }
+    // Platform fees on commissions.
+    let has_commission_fee = conn
+        .prepare("SELECT 1 FROM pragma_table_info('commissions') WHERE name = 'fee'")?
+        .exists([])?;
+    if !has_commission_fee {
+        conn.execute_batch(
+            "ALTER TABLE commissions ADD COLUMN platform TEXT NOT NULL DEFAULT '';
+             ALTER TABLE commissions ADD COLUMN fee_kind TEXT NOT NULL DEFAULT 'percent';
+             ALTER TABLE commissions ADD COLUMN fee REAL NOT NULL DEFAULT 0;",
+        )?;
     }
     Ok(())
 }

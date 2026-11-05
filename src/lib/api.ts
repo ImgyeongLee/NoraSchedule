@@ -135,6 +135,8 @@ export interface Bookmark {
   created_at: number;
 }
 
+export type ExpenseKind = 'expense' | 'income';
+
 export interface Expense {
   id: number;
   amount: number;
@@ -142,6 +144,7 @@ export interface Expense {
   category: string;
   date: DateStr;
   note: string;
+  kind: ExpenseKind;
 }
 
 export type DiaryMood = '' | 'great' | 'good' | 'love' | 'okay' | 'tired' | 'sad' | 'angry';
@@ -202,6 +205,11 @@ export interface Commission {
   created_at: number;
   /** Set when moved to "done". */
   delivered: DateStr | null;
+  /** Where it was taken (a commission site); empty for direct deals. */
+  platform: string;
+  /** How the platform fee is given: a percentage of the price or a fixed amount. */
+  fee_kind: 'percent' | 'amount';
+  fee: number;
 }
 
 export interface CommissionClient {

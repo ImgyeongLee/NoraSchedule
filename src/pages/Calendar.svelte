@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarPlus, ChevronLeft, ChevronRight, Leaf, MapPin, Repeat, Settings2, Tags, Target } from '@lucide/svelte';
+  import { CalendarPlus, ChevronLeft, ChevronRight, Table2, X, Leaf, MapPin, Repeat, Settings2, Tags, Target } from '@lucide/svelte';
   import MiniCalendar from '../components/MiniCalendar.svelte';
   import MonthView from './MonthView.svelte';
   import TimeGrid from './TimeGrid.svelte';
@@ -15,10 +15,11 @@
   import { eventMenu, pageTarget, pasteAsEvent } from '../lib/clipboard.svelte';
   import { eventHover } from '../lib/hovercard.svelte';
   import { openMenu } from '../lib/menu.svelte';
-  import { sortDayEvents } from '../lib/calPrefs.svelte';
+  import { calPrefs, setCalPrefs, sortDayEvents } from '../lib/calPrefs.svelte';
   import { eventColor, groupedTags, matchesTagFilter, setTagFilter, tagStore, tagsOf, toggleTagFilter } from '../lib/tags.svelte';
   import TagManager from '../components/TagManager.svelte';
   import TodoChip from '../components/TodoChip.svelte';
+  import UpcomingTable from '../components/UpcomingTable.svelte';
   import DeadlineChip from '../components/DeadlineChip.svelte';
   import { loadCalendarTodos } from '../lib/calendarTodos';
   import type { CalTodo } from '../lib/lanes';
@@ -142,6 +143,8 @@
       <button class="icon-btn" onclick={() => step(1)} aria-label={t('common.next')}><ChevronRight size={18} /></button>
     </div>
     <span class="spacer"></span>
+    <button class="btn" class:active-toggle={calPrefs.upcomingTable} onclick={() => setCalPrefs({ upcomingTable: !calPrefs.upcomingTable })}
+      aria-pressed={calPrefs.upcomingTable} title={t('up.toggle')}><Table2 size={16} /> {t('up.title')}</button>
     <button class="btn primary" onclick={() => newEvent(cursor)}><CalendarPlus size={17} /> {t('cal.new')}</button>
   </header>
 
@@ -170,6 +173,17 @@
         />
       {/if}
     </div>
+    {#if calPrefs.upcomingTable}
+      <section class="card upcoming-card">
+        <div class="up-head">
+          <h3>{t('up.title')}</h3>
+          <span class="muted small">{t('up.subtitle')}</span>
+          <span class="spacer"></span>
+          <button class="icon-btn" onclick={() => setCalPrefs({ upcomingTable: false })} title={t('up.hide')} aria-label={t('up.hide')}><X size={15} /></button>
+        </div>
+        <UpcomingTable onopen={(e) => (editing = e)} />
+      </section>
+    {/if}
     <p class="hint faint small">{t('cal.dragTip')}</p>
   </div>
 
@@ -292,6 +306,29 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+  }
+  .upcoming-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: none;
+    /* The calendar keeps most of the height; the table scrolls inside its own box. */
+    height: clamp(220px, 36%, 360px);
+    margin-top: var(--gap);
+    padding: 14px 16px;
+  }
+  .up-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .up-head h3 {
+    margin: 0;
+  }
+  .active-toggle {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
   }
   header {
     grid-area: head;

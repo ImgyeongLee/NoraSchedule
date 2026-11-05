@@ -16,6 +16,7 @@
   import { loadCalPrefs } from './lib/calPrefs.svelte';
   import { initSync } from './lib/sync.svelte';
   import { loadPanelWidgets, panelApi } from './lib/panel';
+  import { mirrorPomodoro } from './lib/pomodoroSync.svelte';
 
   let widgets = $state<WidgetId[]>([]);
   let onTop = $state(true);
@@ -34,6 +35,7 @@
     reloadPrefs();
     refreshTags();
     initSync(data, refreshTags, reloadPrefs);
+    mirrorPomodoro();
   });
 
   // Widgets "navigate" by setting ui.page (and the day or memo to open). There are no

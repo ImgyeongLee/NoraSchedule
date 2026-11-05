@@ -146,7 +146,7 @@ export function installMock() {
     for (let k = 0; k < 1 + (d % 3); k++) {
       const c = cats[(d * 3 + k) % cats.length];
       const base = { food: 9000, cafe: 4800, transport: 1500, shopping: 32000, bills: 55000, fun: 15000 }[c] ?? 10000;
-      expenses.push({ id: 1000 + d * 10 + k, amount: base + ((d * 7 + k * 13) % 9) * 500, category: c, date: day, note: k === 0 && c === 'food' ? 'Lunch' : '' });
+      expenses.push({ id: 1000 + d * 10 + k, amount: base + ((d * 7 + k * 13) % 9) * 500, category: c, date: day, note: k === 0 && c === 'food' ? 'Lunch' : '', kind: 'expense' });
     }
   }
   const diary: DiaryEntry[] = [
@@ -162,10 +162,10 @@ export function installMock() {
   ];
   const commission = (id: number, title: string, client_id: number | null, kind: string, status: Commission['status'], price: number, extra: Partial<Commission> = {}): Commission => ({
     id, title, client_id, kind, status, price, payments: [], deadline: null, revisions: 0, links: [], image: null, memo: '',
-    created_at: now - 86_400 * (9000 - id), delivered: null, ...extra,
+    created_at: now - 86_400 * (9000 - id), delivered: null, platform: '', fee_kind: 'percent', fee: 0, ...extra,
   });
   const commissions: Commission[] = [
-    commission(8100, '하루님 자캐 흉상', 8000, '흉상', 'working', 60000, { deadline: addDays(t, 3), payments: [{ amount: 30000, date: addDays(t, -6) }], revisions: 1 }),
+    commission(8100, '하루님 자캐 흉상', 8000, '흉상', 'working', 60000, { deadline: addDays(t, 3), payments: [{ amount: 30000, date: addDays(t, -6) }], revisions: 1, platform: '크레페', fee: 10 }),
     commission(8101, 'Mido SD 2인', 8001, 'SD', 'review', 45000, { deadline: addDays(t, -1), payments: [{ amount: 45000, date: addDays(t, -10) }], revisions: 2 }),
     commission(8102, '전신 일러스트 문의', null, '전신', 'inquiry', 0, { memo: '배경 포함 견적 요청' }),
     commission(8103, '하루님 로고', 8000, '로고', 'queued', 80000, { deadline: addDays(t, 14) }),
@@ -185,6 +185,10 @@ export function installMock() {
     });
     if (d <= 0 && d % 2 === 0) workouts.push({ id: 6000 + d + 6, date: day, kind: d === 0 ? 'running' : 'walking', minutes: d === 0 ? 30 : 45, kcal: d === 0 ? 294 : 158, note: '' });
   }
+  expenses.push(
+    { id: 1900, amount: 2_400_000, category: 'salary', date: addDays(t, -3), note: '월급', kind: 'income' },
+    { id: 1901, amount: 120_000, category: 'lesson', date: addDays(t, -8), note: '드로잉 레슨', kind: 'income' },
+  );
   const trpg: TrpgEntry[] = ([
     { id: 2000, kind: 'rulebook', title: 'Call of Cthulhu 7th Edition', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', folder: '', memo: '', created_at: now - 86_400 * 90 },
     { id: 2001, kind: 'scenario_book', title: 'Doors to Darkness', writer: 'Chaosium', system: 'CoC 7th', links: [], image: null, date: null, role: '', pair: '', folder: '', memo: '5 starter scenarios', created_at: now - 86_400 * 60 },
@@ -423,8 +427,8 @@ export function installMock() {
         books.push({ ...a.book, id: nextId, created_at: a.book.created_at || Math.floor(Date.now() / 1000) }); return nextId++;
       }
       case 'delete_book': { const i = books.findIndex((b) => b.id === a.id); return i < 0 ? null : books.splice(i, 1)[0]; }
-      case 'plugin:app|version': return '0.6.0';
-      case 'latest_release': return { version: '0.7.0', url: 'https://github.com/ImgyeongLee/NoraSchedule/releases/tag/v0.7.0' };
+      case 'plugin:app|version': return '0.7.0';
+      case 'latest_release': return { version: '0.8.0', url: 'https://github.com/ImgyeongLee/NoraSchedule/releases/tag/v0.8.0' };
       case 'plugin:dialog|save': return '/Users/you/Documents/Nora-backup.nora';
       case 'plugin:dialog|open': return '/Users/you/Documents/Nora-backup.nora';
       case 'export_data':

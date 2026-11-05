@@ -21,11 +21,13 @@
     load(api.expensesBetween(from, from.slice(0, 8) + String(last).padStart(2, '0')), []).then((e) => (expenses = e));
   });
 
-  const total = $derived(expenses.reduce((s, e) => s + e.amount, 0));
+  // Income is shown in the money book; this tile is about spending.
+  const spending = $derived(expenses.filter((e) => e.kind !== 'income'));
+  const total = $derived(spending.reduce((s, e) => s + e.amount, 0));
   const used = $derived(expenseSettings.budget ? total / expenseSettings.budget : 0);
   const top = $derived.by(() => {
     const sums = new Map<string, number>();
-    for (const e of expenses) sums.set(e.category, (sums.get(e.category) ?? 0) + e.amount);
+    for (const e of spending) sums.set(e.category, (sums.get(e.category) ?? 0) + e.amount);
     return [...sums.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
   });
 </script>

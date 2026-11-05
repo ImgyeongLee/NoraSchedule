@@ -359,6 +359,13 @@
         </span>
         <input type="checkbox" class="switch" checked={calPrefs.allDayLast} onchange={(e) => setCalPrefs({ allDayLast: e.currentTarget.checked })} />
       </label>
+      <label class="cal-opt">
+        <span>
+          <span class="cal-opt-title">{t('up.setting')}</span>
+          <span class="muted small">{t('up.settingBody')}</span>
+        </span>
+        <input type="checkbox" class="switch" checked={calPrefs.upcomingTable} onchange={(e) => setCalPrefs({ upcomingTable: e.currentTarget.checked })} />
+      </label>
       <div class="cal-opt">
         <span>
           <span class="cal-opt-title">{t('set.timePicker')}</span>

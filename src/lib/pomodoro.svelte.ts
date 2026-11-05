@@ -21,6 +21,22 @@ const MIN_SAVED_SECS = 60;
 /** How often a running focus session is saved, so quitting the app loses at most this much. */
 const SAVE_EVERY_MS = 60_000;
 
+/** What the overlay panel needs to show the timer the main window runs (see pomodoroSync.ts). */
+export interface PomodoroSnapshot {
+  phase: Phase;
+  label: string;
+  completed: number;
+  endsAt: number | null;
+  pausedRemaining: number;
+  started: boolean;
+  focusMin: number;
+  shortMin: number;
+  longMin: number;
+}
+
+/** A button pressed in the panel, carried out by the main window. */
+export type PomodoroCommand = { action: 'toggle' | 'reset' | 'skip' } | { action: 'phase'; phase: Phase };
+
 /** The focus session being recorded. It is saved as it goes, so stopping early never loses it. */
 interface FocusRecord {
   /** Database row once saved. */
@@ -55,6 +71,12 @@ class Pomodoro {
   private lastSaved = 0;
   /** Saves run one after another, so a session is never inserted twice. */
   private saving: Promise<void> = Promise.resolve();
+  /**
+   * In the overlay panel this is only a mirror of the main window's timer: it shows the state it
+   * is sent and passes button presses back (`send`), so there is never a second timer recording.
+   */
+  private mirror = false;
+  private send: ((command: PomodoroCommand) => void) | null = null;
 
   constructor() {
     setInterval(() => this.tick(), 250);
@@ -93,7 +115,32 @@ class Pomodoro {
     if (!this.started) this.pausedRemaining = this.phaseMs;
   }
 
+  /** Turns this copy into a mirror that forwards its buttons with `send` (overlay panel). */
+  mirrorOf(send: (command: PomodoroCommand) => void) {
+    this.mirror = true;
+    this.send = send;
+  }
+
+  snapshot(): PomodoroSnapshot {
+    const { phase, label, completed, endsAt, pausedRemaining, started, focusMin, shortMin, longMin } = this;
+    return { phase, label, completed, endsAt, pausedRemaining, started, focusMin, shortMin, longMin };
+  }
+
+  applySnapshot(s: PomodoroSnapshot) {
+    Object.assign(this, s);
+    this.now = Date.now();
+  }
+
+  /** Carries out a button pressed in the panel. */
+  run(command: PomodoroCommand) {
+    if (command.action === 'toggle') this.toggle();
+    else if (command.action === 'reset') this.reset();
+    else if (command.action === 'skip') this.advance(false);
+    else if (command.action === 'phase') this.setPhase(command.phase);
+  }
+
   start() {
+    if (this.mirror) return this.send?.({ action: 'toggle' });
     if (this.phase === 'focus') {
       this.record ??= { id: null, startedTs: Math.floor(Date.now() / 1000), focusedMs: 0 };
       this.runStartedAt = this.lastSaved = Date.now();
@@ -109,6 +156,7 @@ class Pomodoro {
   }
 
   pause() {
+    if (this.mirror) return this.send?.({ action: 'toggle' });
     this.pausedRemaining = this.remaining;
     this.endsAt = null;
     if (this.phase === 'focus') {
@@ -120,11 +168,13 @@ class Pomodoro {
   }
 
   toggle() {
+    if (this.mirror) return this.send?.({ action: 'toggle' });
     if (this.running) this.pause();
     else this.start();
   }
 
   setPhase(phase: Phase) {
+    if (this.mirror) return this.send?.({ action: 'phase', phase });
     // Leaving a focus session early (skip, switching phase, reset) keeps the time focused so far.
     if (this.record) {
       if (this.endsAt !== null) this.bank(Date.now());
@@ -139,11 +189,13 @@ class Pomodoro {
   }
 
   reset() {
+    if (this.mirror) return this.send?.({ action: 'reset' });
     this.setPhase(this.phase);
   }
 
   /** Moves to the next phase. `finished` = the timer ran out (at `end`); otherwise it was skipped. */
   advance(finished: boolean, end = Date.now()) {
+    if (this.mirror) return this.send?.({ action: 'skip' });
     let next: Phase = 'focus';
     if (this.phase === 'focus') {
       if (finished && this.record) {
@@ -187,7 +239,8 @@ class Pomodoro {
 
   private tick() {
     this.now = Date.now();
-    if (this.endsAt === null) return;
+    // A mirror only shows the time; the main window ends phases and records sessions.
+    if (this.mirror || this.endsAt === null) return;
     if (this.now < this.endsAt) {
       if (this.phase === 'focus' && this.now - this.lastSaved >= SAVE_EVERY_MS) {
         this.lastSaved = this.now;

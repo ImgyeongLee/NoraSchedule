@@ -6,7 +6,7 @@
   import BarChart from './BarChart.svelte';
   import StatCard from './StatCard.svelte';
   import type { Commission } from '../lib/api';
-  import { paidOf, unpaidOf } from '../lib/commissions.svelte';
+  import { feeOf, netOf, netPayment, paidOf, unpaidOf } from '../lib/commissions.svelte';
   import { fmt, today, tsToDate } from '../lib/dates';
   import { fmtMoney, fmtMoneyShort } from '../lib/expenses.svelte';
   import { t } from '../lib/i18n.svelte';
@@ -63,6 +63,7 @@
         group === 'year' ? t('trpg.year', { year: key }) : group === 'month' ? fmt(`${key}-01`, { year: 'numeric', month: 'long' }) : key || t('cm.kindNone'),
       items: items.sort((a, b) => doneOn(b).localeCompare(doneOn(a))),
       price: items.reduce((s, c) => s + c.price, 0),
+      net: items.reduce((s, c) => s + netOf(c), 0),
       paid: items.reduce((s, c) => s + paidOf(c), 0),
     }));
     // Newest year/month first; kinds by how much they earned.
@@ -71,14 +72,18 @@
 
   // Totals for the chosen year (all years when grouped by year).
   const inScope = (date: string) => group === 'year' || date.startsWith(year);
-  const payments = $derived(commissions.flatMap((c) => c.payments.map((p) => ({ ...p, c }))).filter((p) => inScope(p.date)));
-  const received = $derived(payments.reduce((s, p) => s + p.amount, 0));
+  // Money that actually came in: each payment after the platform fee.
+  const payments = $derived(
+    commissions.flatMap((c) => c.payments.map((p) => ({ ...p, net: netPayment(c, p.amount) }))).filter((p) => inScope(p.date)),
+  );
+  const received = $derived(payments.reduce((s, p) => s + p.net, 0));
   const shownPrice = $derived(shown.reduce((s, c) => s + c.price, 0));
+  const shownFees = $derived(shown.reduce((s, c) => s + feeOf(c), 0));
   const shownUnpaid = $derived(shown.reduce((s, c) => s + unpaidOf(c), 0));
   const perMonth = $derived(
     Array.from({ length: 12 }, (_, m) => {
       const prefix = `${year}-${String(m + 1).padStart(2, '0')}`;
-      return { label: String(m + 1), value: payments.filter((p) => p.date.startsWith(prefix)).reduce((s, p) => s + p.amount, 0) };
+      return { label: String(m + 1), value: payments.filter((p) => p.date.startsWith(prefix)).reduce((s, p) => s + p.net, 0) };
     }),
   );
 
@@ -86,7 +91,7 @@
   function copyTable() {
     const clean = (s: string) => s.replace(/[\t\n\r]+/g, ' ').trim();
     const rows = [
-      [t('cm.colDone'), t('cm.title'), t('cm.client'), t('cm.kind'), t('cm.price'), t('cm.colPaid'), t('cm.colPaidOn')],
+      [t('cm.colDone'), t('cm.title'), t('cm.client'), t('cm.kind'), t('cm.platform'), t('cm.price'), t('cm.fee'), t('cm.netLabel'), t('cm.colPaid'), t('cm.colPaidOn')],
       ...shown
         .slice()
         .sort((a, b) => doneOn(a).localeCompare(doneOn(b)))
@@ -95,11 +100,14 @@
           clean(c.title),
           clean(clientName(c)),
           clean(c.kind),
+          clean(c.platform),
           String(c.price),
+          String(Math.round(feeOf(c))),
+          String(Math.round(netOf(c))),
           String(paidOf(c)),
           c.payments.map((p) => p.date).join(', '),
         ]),
-      ['', t('cm.colTotal'), '', '', String(shownPrice), String(shown.reduce((s, c) => s + paidOf(c), 0)), ''],
+      ['', t('cm.colTotal'), '', '', '', String(shownPrice), String(Math.round(shownFees)), String(Math.round(shownPrice - shownFees)), String(shown.reduce((s, c) => s + paidOf(c), 0)), ''],
     ];
     navigator.clipboard?.writeText(rows.map((r) => r.join('\t')).join('\n')).catch(() => {});
     toast(t('cm.tableCopied', { n: shown.length }), 'success');
@@ -126,7 +134,12 @@
 
   <div class="stats">
     <StatCard label={t('cm.statDone')} value={String(shown.length)} sub={group === 'year' ? t('cm.allYears') : t('trpg.year', { year })} icon={CalendarCheck} tint="var(--success)" />
-    <StatCard label={t('cm.statDoneTotal')} value={fmtMoney(shownPrice)} sub={t('cm.basisDone')} icon={Receipt} />
+    <StatCard
+      label={t('cm.statDoneTotal')}
+      value={fmtMoney(shownPrice)}
+      sub={shownFees > 0 ? t('cm.netOfTotal', { net: fmtMoney(shownPrice - shownFees), fee: fmtMoney(shownFees) }) : t('cm.basisDone')}
+      icon={Receipt}
+    />
     <StatCard label={t('cm.statReceived')} value={fmtMoney(received)} sub={t('cm.basisPaid', { n: payments.length })} icon={Wallet} tint="var(--long-break)" />
     <StatCard label={t('cm.statUnpaid')} value={fmtMoney(shownUnpaid)} sub={t('cm.unpaidDone')} icon={HandCoins} tint={shownUnpaid > 0 ? 'var(--warning)' : 'var(--success)'} />
   </div>
@@ -144,7 +157,7 @@
         <h3>{g.label}</h3>
         <span class="muted small">{t('cm.statCount', { n: g.items.length })}</span>
         <span class="spacer"></span>
-        <span class="small muted">{t('cm.paidOf', { paid: fmtMoney(g.paid), price: fmtMoney(g.price) })}</span>
+        <span class="small muted">{g.net < g.price ? t('cm.netGroup', { net: fmtMoney(g.net) }) : t('cm.paidOf', { paid: fmtMoney(g.paid), price: fmtMoney(g.price) })}</span>
         <span class="group-total tabular">{fmtMoney(g.price)}</span>
       </div>
       {#each g.items as c (c.id)}
@@ -152,10 +165,13 @@
           <span class="date muted small tabular">{fmt(doneOn(c), { month: 'short', day: 'numeric' })}</span>
           <span class="row-title">
             <span class="strong truncate">{c.title}</span>
-            <span class="muted small truncate">{[clientName(c), group === 'kind' ? '' : c.kind].filter(Boolean).join(' · ')}</span>
+            <span class="muted small truncate">{[clientName(c), group === 'kind' ? '' : c.kind, c.platform].filter(Boolean).join(' · ')}</span>
           </span>
           {#if unpaidOf(c) > 0}<span class="owes small">{t('cm.left', { amount: fmtMoney(unpaidOf(c)) })}</span>{/if}
-          <span class="amount tabular">{fmtMoney(c.price)}</span>
+          <span class="amounts">
+            <span class="amount tabular">{fmtMoney(c.price)}</span>
+            {#if feeOf(c) > 0}<span class="faint small tabular">{t('cm.netShort', { amount: fmtMoney(netOf(c)) })}</span>{/if}
+          </span>
         </button>
       {/each}
     </section>
@@ -244,5 +260,11 @@
   .owes {
     flex: none;
     color: var(--warning);
+  }
+  .amounts {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex: none;
   }
 </style>

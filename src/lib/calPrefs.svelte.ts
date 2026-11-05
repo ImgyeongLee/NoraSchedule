@@ -12,6 +12,12 @@ export const calPrefs = $state({
   allDayLast: true,
   /** 'list': times every 15 minutes; 'precise': AM/PM, hour 1–12 and minute 0–59. */
   timePicker: 'list' as TimePicker,
+  /** Show the table of upcoming plans under the calendar. */
+  upcomingTable: true,
+  /** How far ahead that table (and the Overview tile) looks, in months. */
+  upcomingMonths: 3,
+  /** Include repeating events in it (off: they would crowd out the one-off plans). */
+  upcomingRepeat: false,
 });
 
 export async function loadCalPrefs() {
@@ -20,6 +26,9 @@ export async function loadCalPrefs() {
     if (saved && typeof saved === 'object') {
       if (typeof saved.allDayLast === 'boolean') calPrefs.allDayLast = saved.allDayLast;
       if (saved.timePicker === 'list' || saved.timePicker === 'precise') calPrefs.timePicker = saved.timePicker;
+      if (typeof saved.upcomingTable === 'boolean') calPrefs.upcomingTable = saved.upcomingTable;
+      if ([1, 3, 6, 12].includes(saved.upcomingMonths)) calPrefs.upcomingMonths = saved.upcomingMonths;
+      if (typeof saved.upcomingRepeat === 'boolean') calPrefs.upcomingRepeat = saved.upcomingRepeat;
     }
   } catch {
     // Corrupt setting: keep the defaults.

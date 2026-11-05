@@ -32,11 +32,11 @@ export const panelApi = {
   setAutostart: (enabled: boolean) => invoke<boolean>('set_autostart', { enabled }),
 };
 
-/** Pomodoro keeps its timer in the window that runs it, and image cards belong to an
- * Overview tile, so neither is offered in the panel. */
+/** Image cards belong to an Overview tile, so they are not offered in the panel. The Pomodoro
+ * tile mirrors the main window's timer (see pomodoro.svelte.ts). */
 export const PANEL_WIDGETS: WidgetId[] = [
   'agenda', 'todos', 'calendar', 'ddays', 'dday', 'greeting', 'memos', 'working', 'weekChart', 'progress',
-  'bookmarks', 'expenses', 'health', 'commissions',
+  'bookmarks', 'expenses', 'health', 'commissions', 'upcoming', 'pomodoro',
 ];
 export const DEFAULT_PANEL_WIDGETS: WidgetId[] = ['agenda', 'todos', 'calendar'];
 const WIDGETS_SETTING = 'panel.widgets';

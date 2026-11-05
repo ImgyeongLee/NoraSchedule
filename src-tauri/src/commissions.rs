@@ -46,10 +46,24 @@ pub struct Commission {
     /// Set when the commission is moved to `done`, cleared when moved back.
     #[serde(default)]
     pub delivered: Option<NaiveDate>,
+    /// Where it was taken (e.g. a commission site); empty for direct deals.
+    #[serde(default)]
+    pub platform: String,
+    /// How the platform fee is given: "percent" of the price or a fixed "amount".
+    #[serde(default = "Commission::default_fee_kind")]
+    pub fee_kind: String,
+    /// The platform fee (a percentage or an amount, see `fee_kind`).
+    #[serde(default)]
+    pub fee: f64,
 }
 
 impl Commission {
     pub const STATUSES: [&'static str; 5] = ["inquiry", "queued", "working", "review", "done"];
+    pub const FEE_KINDS: [&'static str; 2] = ["percent", "amount"];
+
+    fn default_fee_kind() -> String {
+        "percent".into()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,8 +77,8 @@ pub struct CommissionClient {
     pub memo: String,
 }
 
-const COLUMNS: &str =
-    "id, title, client_id, kind, status, price, payments, deadline, revisions, links, image, memo, created_at, delivered";
+const COLUMNS: &str = "id, title, client_id, kind, status, price, payments, deadline, revisions, links, image, memo, created_at, \
+     delivered, platform, fee_kind, fee";
 
 /// Links are stored one per line, like event links.
 fn links_text(links: &[String]) -> String {
@@ -89,6 +103,9 @@ fn commission_from_row(r: &Row) -> DbResult<Commission> {
         memo: r.get(11)?,
         created_at: r.get(12)?,
         delivered: r.get::<_, Option<String>>(13)?.map(parse_d),
+        platform: r.get(14)?,
+        fee_kind: r.get(15)?,
+        fee: r.get(16)?,
     })
 }
 
@@ -107,21 +124,21 @@ impl Db {
             let created = if c.created_at > 0 { c.created_at } else { now_ts() };
             self.conn.execute(
                 "INSERT INTO commissions(title, client_id, kind, status, price, payments, deadline, revisions, links, image, memo,
-                                         created_at, delivered)
-                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                                         created_at, delivered, platform, fee_kind, fee)
+                 VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     c.title, c.client_id, c.kind, c.status, c.price, payments, date(c.deadline), c.revisions,
-                    links_text(&c.links), c.image, c.memo, created, date(delivered)
+                    links_text(&c.links), c.image, c.memo, created, date(delivered), c.platform, c.fee_kind, c.fee
                 ],
             )?;
             Ok(self.conn.last_insert_rowid())
         } else {
             self.conn.execute(
                 "UPDATE commissions SET title=?1, client_id=?2, kind=?3, status=?4, price=?5, payments=?6, deadline=?7, revisions=?8,
-                 links=?9, image=?10, memo=?11, delivered=?12 WHERE id=?13",
+                 links=?9, image=?10, memo=?11, delivered=?12, platform=?13, fee_kind=?14, fee=?15 WHERE id=?16",
                 params![
                     c.title, c.client_id, c.kind, c.status, c.price, payments, date(c.deadline), c.revisions,
-                    links_text(&c.links), c.image, c.memo, date(delivered), c.id
+                    links_text(&c.links), c.image, c.memo, date(delivered), c.platform, c.fee_kind, c.fee, c.id
                 ],
             )?;
             Ok(c.id)
@@ -188,6 +205,9 @@ mod tests {
             memo: String::new(),
             created_at: 0,
             delivered: None,
+            platform: String::new(),
+            fee_kind: "percent".into(),
+            fee: 0.0,
         }
     }
 
@@ -207,7 +227,9 @@ mod tests {
         assert!(done.delivered.is_some());
 
         // Moved back to work: no longer delivered.
-        db.save_commission(&Commission { status: "review".into(), ..done }).unwrap();
+        db.save_commission(&Commission { status: "review".into(), platform: "크레페".into(), fee: 10.0, ..done }).unwrap();
+        let fee = db.commissions().unwrap().remove(0);
+        assert_eq!((fee.platform.as_str(), fee.fee_kind.as_str(), fee.fee), ("크레페", "percent", 10.0));
         assert_eq!(db.commissions().unwrap()[0].delivered, None);
 
         let removed = db.delete_commission(id).unwrap().unwrap();

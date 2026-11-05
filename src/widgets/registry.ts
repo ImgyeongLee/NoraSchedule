@@ -16,6 +16,7 @@ import MemosWidget from './MemosWidget.svelte';
 import PomodoroWidget from './PomodoroWidget.svelte';
 import ProgressWidget from './ProgressWidget.svelte';
 import TodosWidget from './TodosWidget.svelte';
+import UpcomingWidget from './UpcomingWidget.svelte';
 import WeekChartWidget from './WeekChartWidget.svelte';
 import WorkingWidget from './WorkingWidget.svelte';
 
@@ -25,6 +26,7 @@ export const WIDGET_COMPONENTS: Record<WidgetId, Component<any>> = {
   expenses: ExpensesWidget,
   health: HealthWidget,
   commissions: CommissionsWidget,
+  upcoming: UpcomingWidget,
   greeting: GreetingWidget,
   agenda: AgendaWidget,
   calendar: CalendarWidget,

@@ -24,6 +24,24 @@ export const nextStage = (id: CommissionStatus): CommissionStatus =>
 export const KIND_PRESETS = ['두상', '흉상', '반신', '전신', 'SD', '일러스트', '배경', '캐릭터 디자인', '로고', '굿즈'];
 
 export const paidOf = (c: Commission) => c.payments.reduce((s, p) => s + p.amount, 0);
+
+/** Common commission sites, offered as suggestions for the platform (anything can be typed). */
+export const PLATFORM_PRESETS = ['크레페', '크몽', '픽시브 리퀘스트', '스킵', '포스타입', '트위터(X) 직거래', 'VGen', 'Ko-fi'];
+
+/** The platform's cut of the price (never more than the price). */
+export function feeOf(c: Pick<Commission, 'price' | 'fee' | 'fee_kind'>): number {
+  const price = Math.max(0, Number(c.price) || 0);
+  const fee = Math.max(0, Number(c.fee) || 0);
+  return Math.min(price, c.fee_kind === 'amount' ? fee : (price * Math.min(100, fee)) / 100);
+}
+/** What actually reaches the artist for the whole price. */
+export const netOf = (c: Pick<Commission, 'price' | 'fee' | 'fee_kind'>) => Math.max(0, (Number(c.price) || 0) - feeOf(c));
+/** Share of each payment that is kept after the fee (1 without a price or fee). */
+export const keptShare = (c: Commission) => (c.price > 0 ? netOf(c) / c.price : 1);
+/** A payment after the platform fee (the fee is spread over the payments in proportion). */
+export const netPayment = (c: Commission, amount: number) => amount * keptShare(c);
+/** Everything received so far, after fees. */
+export const netPaidOf = (c: Commission) => netPayment(c, paidOf(c));
 /** What is still owed (never negative). */
 export const unpaidOf = (c: Commission) => Math.max(0, c.price - paidOf(c));
 

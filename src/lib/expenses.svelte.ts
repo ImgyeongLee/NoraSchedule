@@ -1,7 +1,8 @@
-// Expense categories (preset icons/colors) and currency formatting.
+// Money book categories (spending and income, with preset icons/colors) and currency formatting.
 import type { Component } from 'svelte';
 import {
-  Bus, CircleEllipsis, Coffee, GraduationCap, HeartPulse, House, Gamepad2, Gift, Plane, Receipt, ShoppingBag, Utensils,
+  Briefcase, Brush, Bus, CircleEllipsis, Coffee, Coins, GraduationCap, HeartHandshake, HeartPulse, House, Gamepad2, Gift, Landmark,
+  Laptop, Plane, Presentation, Receipt, ShoppingBag, Store, Utensils,
 } from '@lucide/svelte';
 import { api } from './api';
 import { intlLocale, i18n, type Key } from './i18n.svelte';
@@ -21,28 +22,52 @@ export const CATEGORIES: { id: string; label: Key; icon: Component<{ size?: numb
   { id: 'other', label: 'ex.cat.other', icon: CircleEllipsis, color: '#94a3b8' },
 ];
 
-export const categoryOf = (id: string) => CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
+/** Where income comes from; broad enough for jobs, side work and creative income alike. */
+export const INCOME_CATEGORIES: { id: string; label: Key; icon: Component<{ size?: number }>; color: string }[] = [
+  { id: 'salary', label: 'ex.in.salary', icon: Briefcase, color: '#4aa8ff' },
+  { id: 'sidejob', label: 'ex.in.sidejob', icon: Laptop, color: '#7c74ff' },
+  { id: 'commission', label: 'ex.in.commission', icon: Brush, color: '#f2668b' },
+  { id: 'lesson', label: 'ex.in.lesson', icon: Presentation, color: '#22b5bf' },
+  { id: 'sales', label: 'ex.in.sales', icon: Store, color: '#ff8a5c' },
+  { id: 'creator', label: 'ex.in.creator', icon: HeartHandshake, color: '#b164e8' },
+  { id: 'allowance', label: 'ex.in.allowance', icon: Coins, color: '#f5b83d' },
+  { id: 'investment', label: 'ex.in.investment', icon: Landmark, color: '#34c38f' },
+  { id: 'other_income', label: 'ex.in.other', icon: CircleEllipsis, color: '#94a3b8' },
+];
+
+export const categoryOf = (id: string) =>
+  CATEGORIES.find((c) => c.id === id) ?? INCOME_CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
 
 export const CURRENCIES = ['KRW', 'USD', 'EUR', 'JPY', 'GBP', 'CNY', 'CAD', 'AUD'] as const;
 
 /** Currencies normally written without decimals. */
 const NO_DECIMALS = new Set(['KRW', 'JPY']);
 
-export const expenseSettings = $state({ currency: '' as string, budget: null as number | null, loaded: false });
+export const expenseSettings = $state({
+  currency: '' as string,
+  budget: null as number | null,
+  /** Show payments from the commission manager (after fees) as income. */
+  linkCommissions: true,
+  loaded: false,
+});
 
 export async function loadExpenseSettings() {
-  const [currency, budget] = await Promise.all([
+  const [currency, budget, link] = await Promise.all([
     api.getSetting('expense.currency').catch(() => null),
     api.getSetting('expense.budget').catch(() => null),
+    api.getSetting('expense.linkCommissions').catch(() => null),
   ]);
+  expenseSettings.linkCommissions = link !== 'false';
   expenseSettings.currency = currency ?? ({ ko: 'KRW', ja: 'JPY', en: 'USD' } as const)[i18n.locale];
   expenseSettings.budget = budget && Number(budget) > 0 ? Number(budget) : null;
   expenseSettings.loaded = true;
 }
 
-export async function saveExpenseSettings(currency: string, budget: number | null) {
+export async function saveExpenseSettings(currency: string, budget: number | null, linkCommissions = expenseSettings.linkCommissions) {
   expenseSettings.currency = currency;
   expenseSettings.budget = budget && budget > 0 ? budget : null;
+  expenseSettings.linkCommissions = linkCommissions;
+  await api.setSetting('expense.linkCommissions', String(linkCommissions)).catch(() => {});
   await api.setSetting('expense.currency', currency).catch(() => {});
   await api.setSetting('expense.budget', expenseSettings.budget ? String(expenseSettings.budget) : '').catch(() => {});
 }

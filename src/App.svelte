@@ -23,6 +23,7 @@
   import { loadStickers, setDecorating, stickers } from './lib/stickers.svelte';
   import { background, loadBackground } from './lib/background.svelte';
   import { checkForUpdates, loadUpdates } from './lib/updates.svelte';
+  import { sharePomodoro } from './lib/pomodoroSync.svelte';
   import { imageUrl } from './lib/images';
   import { loadCalPrefs } from './lib/calPrefs.svelte';
   import Home from './pages/Home.svelte';
@@ -62,6 +63,7 @@
     initPages();
     initZoom();
     pomodoro.load();
+    sharePomodoro();
     refreshTags();
     loadStickers();
     loadBackground();
