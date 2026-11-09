@@ -14,6 +14,7 @@
     loadHealthSettings, saveHealthSettings, slotForNow, slotOf,
   } from '../lib/health.svelte';
   import { t } from '../lib/i18n.svelte';
+  import { numeric } from '../lib/numberInput';
   import { openMenu } from '../lib/menu.svelte';
   import { data, load, mutate, toast } from '../lib/state.svelte';
 
@@ -231,21 +232,18 @@
   const pct = (n: number) => `${Math.max(0, Math.min(100, (n / scale) * 100))}%`;
 </script>
 
-{#snippet unitInput(value: string, set: (v: string) => void, unit: string, opts: { id?: string; placeholder?: string; label?: string; max?: number; onenter?: () => void })}
+{#snippet unitInput(value: string, set: (v: string) => void, unit: string, opts: { id?: string; placeholder?: string; label?: string; max?: number; decimal?: boolean; onenter?: () => void })}
   <div class="unit-input">
     <input
       id={opts.id}
       class="input tabular"
-      type="number"
-      inputmode="numeric"
-      min="0"
-      max={opts.max}
-      step="1"
+      type="text"
+      use:numeric={{ max: opts.max, decimal: opts.decimal }}
       placeholder={opts.placeholder ?? '0'}
       aria-label={opts.label}
       {value}
       oninput={(e) => set(e.currentTarget.value)}
-      onkeydown={(e) => e.key === 'Enter' && opts.onenter?.()}
+      onkeydown={(e) => e.key === 'Enter' && !e.isComposing && opts.onenter?.()}
     />
     <span class="unit">{unit}</span>
   </div>
@@ -542,7 +540,7 @@
     </div>
     <div class="field">
       <label for="hl-weight">{t('hl.weight')}</label>
-      {@render unitInput(settingsForm.weight, (v) => (settingsForm.weight = v), 'kg', { id: 'hl-weight', max: 500, onenter: saveSettings })}
+      {@render unitInput(settingsForm.weight, (v) => (settingsForm.weight = v), 'kg', { id: 'hl-weight', max: 500, decimal: true, onenter: saveSettings })}
       <span class="faint small">{t('hl.weightHint')}</span>
     </div>
     {#snippet footer()}
@@ -825,11 +823,6 @@
   .unit-input .input {
     width: 100%;
     padding-right: 46px;
-  }
-  .unit-input .input::-webkit-inner-spin-button,
-  .unit-input .input::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
   }
   .unit {
     position: absolute;

@@ -25,7 +25,25 @@
   import type { CalTodo } from '../lib/lanes';
 
   type View = 'month' | 'week' | 'day';
-  let view = $state<View>('month');
+  // Remembered in this browser, so coming back to the calendar shows the same view.
+  const VIEW_KEY = 'nora.calendar.view';
+  function readView(): View {
+    try {
+      const v = localStorage.getItem(VIEW_KEY);
+      return v === 'week' || v === 'day' ? v : 'month';
+    } catch {
+      return 'month';
+    }
+  }
+  let view = $state<View>(readView());
+  $effect(() => {
+    const value = view;
+    try {
+      localStorage.setItem(VIEW_KEY, value);
+    } catch {
+      /* not remembered; fine */
+    }
+  });
   let cursor = $state(ui.calendarFocus ?? today());
   ui.calendarFocus = null;
   let events = $state<CalEvent[]>([]);

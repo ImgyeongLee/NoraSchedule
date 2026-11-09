@@ -1,6 +1,6 @@
 [package]
 name = "nora-schedule"
-version = "0.7.0"
+version = "0.7.1"
 description = "A light desktop schedule manager"
 edition = "2024"
 

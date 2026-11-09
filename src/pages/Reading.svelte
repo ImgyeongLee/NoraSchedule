@@ -13,6 +13,7 @@
   import { bookViews } from '../lib/bookView.svelte';
   import { diffDays, fmt, today } from '../lib/dates';
   import { t, type Key } from '../lib/i18n.svelte';
+  import { numeric, toNum } from '../lib/numberInput';
   import { openMenu } from '../lib/menu.svelte';
   import { data, load, mutate, toast } from '../lib/state.svelte';
 
@@ -257,12 +258,11 @@
                 <label class="page-input">
                   <input
                     class="input"
-                    type="number"
-                    min="0"
-                    max={b.total_pages || undefined}
+                    type="text"
+                    use:numeric={{ max: b.total_pages || undefined }}
                     value={pageDraft[b.id] ?? String(b.current_page)}
                     oninput={(e) => (pageDraft[b.id] = e.currentTarget.value)}
-                    onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                    onkeydown={(e) => e.key === 'Enter' && !e.isComposing && e.currentTarget.blur()}
                     onblur={() => savePage(b)}
                     aria-label={t('read.currentPage')}
                   />
@@ -372,9 +372,11 @@
         <div class="field">
           <label for="book-current">{t('read.progress')}</label>
           <div class="pages">
-            <input id="book-current" class="input" type="number" min="0" bind:value={editing.current_page} aria-label={t('read.currentPage')} />
+            <input id="book-current" class="input" type="text" use:numeric value={editing.current_page ?? ''}
+              oninput={(e) => editing && (editing.current_page = toNum(e.currentTarget.value))} aria-label={t('read.currentPage')} />
             <span class="muted">/</span>
-            <input class="input" type="number" min="0" bind:value={editing.total_pages} placeholder={t('read.totalPages')} aria-label={t('read.totalPages')} />
+            <input class="input" type="text" use:numeric value={editing.total_pages ?? ''}
+              oninput={(e) => editing && (editing.total_pages = toNum(e.currentTarget.value))} placeholder={t('read.totalPages')} aria-label={t('read.totalPages')} />
             <span class="muted">{t('read.pageUnit')}</span>
           </div>
         </div>

@@ -17,6 +17,7 @@
     loadExpenseSettings, saveExpenseSettings,
   } from '../lib/expenses.svelte';
   import { t } from '../lib/i18n.svelte';
+  import { numeric } from '../lib/numberInput';
   import { openMenu } from '../lib/menu.svelte';
   import { data, load, mutate, toast, ui } from '../lib/state.svelte';
 
@@ -260,13 +261,11 @@
         <input
           bind:this={amountInput}
           class="amount"
-          type="number"
-          inputmode="decimal"
-          min="0"
-          step="any"
+          type="text"
+          use:numeric={{ decimal: true }}
           placeholder="0"
           bind:value={amount}
-          onkeydown={(e) => e.key === 'Enter' && add()}
+          onkeydown={(e) => e.key === 'Enter' && !e.isComposing && add()}
           aria-label={t('ex.amount')}
         />
       </div>
@@ -280,7 +279,7 @@
       </div>
       <div class="row">
         <div class="date"><DateField value={date} label={t('common.date')} onchange={(v) => v && (date = v)} /></div>
-        <input class="input" placeholder={kind === 'income' ? t('ex.incomeNotePlaceholder') : t('ex.notePlaceholder')} bind:value={note} onkeydown={(e) => e.key === 'Enter' && add()} />
+        <input class="input" placeholder={kind === 'income' ? t('ex.incomeNotePlaceholder') : t('ex.notePlaceholder')} bind:value={note} onkeydown={(e) => e.key === 'Enter' && !e.isComposing && add()} />
       </div>
       {#if kind === 'income' && category === 'commission' && expenseSettings.linkCommissions}
         <p class="faint small link-hint"><Brush size={13} /> {t('ex.commissionHint')}</p>
@@ -377,8 +376,9 @@
       <label for="ex-amount">{t('ex.amount')}</label>
       <div class="amount-row in-modal">
         <span class="symbol">{currencySymbol()}</span>
-        <input id="ex-amount" class="amount" type="number" inputmode="decimal" min="0" step="any" bind:value={editing.amount}
-          onkeydown={(e) => e.key === 'Enter' && saveEdit()} />
+        <input id="ex-amount" class="amount" type="text" use:numeric={{ decimal: true }} value={editing.amount || ''}
+          oninput={(e) => editing && (editing.amount = Number(e.currentTarget.value) || 0)}
+          onkeydown={(e) => e.key === 'Enter' && !e.isComposing && saveEdit()} />
       </div>
     </div>
     <div class="field">
@@ -413,7 +413,7 @@
     </div>
     <div class="field">
       <label for="ex-budget">{t('ex.budget')}</label>
-      <input id="ex-budget" class="input" type="number" min="0" step="any" placeholder={t('ex.budgetPlaceholder')} bind:value={settingsForm.budget} />
+      <input id="ex-budget" class="input" type="text" use:numeric={{ decimal: true }} placeholder={t('ex.budgetPlaceholder')} bind:value={settingsForm.budget} />
     </div>
     <label class="link-setting">
       <span>
@@ -532,11 +532,6 @@
     font-weight: 750;
     letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
-  }
-  .amount::-webkit-inner-spin-button,
-  .amount::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
   }
   .amount-row.in-modal .amount {
     height: 42px;

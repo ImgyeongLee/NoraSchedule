@@ -18,7 +18,24 @@
 
   type Filter = 'all' | 'today' | 'ungrouped' | 'routines' | number;
   let filter = $state<Filter>('all');
-  let showDone = $state(true);
+  // Remembered in this browser, so leaving the page keeps finished to-dos hidden (or shown).
+  const SHOW_DONE_KEY = 'nora.todos.showDone';
+  function readShowDone() {
+    try {
+      return localStorage.getItem(SHOW_DONE_KEY) !== 'false';
+    } catch {
+      return true;
+    }
+  }
+  let showDone = $state(readShowDone());
+  $effect(() => {
+    const value = showDone;
+    try {
+      localStorage.setItem(SHOW_DONE_KEY, String(value));
+    } catch {
+      /* not remembered; fine */
+    }
+  });
   let todos = $state<Todo[]>([]);
   let groups = $state<TodoGroup[]>([]);
   let newTitle = $state('');

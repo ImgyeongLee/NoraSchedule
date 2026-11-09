@@ -17,6 +17,7 @@
   import { api, type TrpgEntry, type TrpgKind } from '../lib/api';
   import { fmt } from '../lib/dates';
   import { t, type Key } from '../lib/i18n.svelte';
+  import { numeric } from '../lib/numberInput';
   import { openMenu, type MenuItem } from '../lib/menu.svelte';
   import { hideHoverCard, showNoteCard } from '../lib/hovercard.svelte';
   import { joinRoles, playsOf, ROLE_PRESETS, roleLabel, rolesOf, totalPlays } from '../lib/trpgRoles';
@@ -500,10 +501,8 @@
             <input
               id="trpg-plays"
               class="tabular"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              max={MAX_PLAY_COUNT}
+              type="text"
+              use:numeric={{ max: MAX_PLAY_COUNT }}
               value={editing.play_count}
               oninput={(e) => setPlayCount(Number(e.currentTarget.value))}
             />
@@ -616,11 +615,6 @@
     font-weight: 700;
     text-align: center;
     color: var(--text);
-  }
-  .stepper input::-webkit-inner-spin-button,
-  .stepper input::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
   }
   .book-sort {
     width: 190px;

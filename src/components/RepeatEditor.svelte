@@ -5,6 +5,7 @@
   import type { Freq, Repeat } from '../lib/api';
   import { parseYmd, weekdayNames } from '../lib/dates';
   import { t } from '../lib/i18n.svelte';
+  import { numeric, toNum } from '../lib/numberInput';
   import DateField from './DateField.svelte';
 
   let { value = $bindable(), startDate }: { value: Repeat | null; startDate: string } = $props();
@@ -59,7 +60,7 @@
   {#if value}
     <div class="row">
       <span class="lbl">{t('rep.every')}</span>
-      <input class="input num" type="number" min="1" max="99" bind:value={value.interval} />
+      <input class="input num" type="text" use:numeric={{ max: 99 }} value={value.interval ?? ''} oninput={(e) => value && (value.interval = toNum(e.currentTarget.value))} />
       <span class="muted">{t(`rep.unit.${value.freq}`)}</span>
     </div>
 
@@ -86,7 +87,7 @@
           <DateField value={value.until} min={startDate} label={t('rep.onDate')} onchange={(v) => value && (value.until = v || startDate)} />
         </div>
       {:else if ends === 'count'}
-        <input class="input num" type="number" min="1" max="999" bind:value={value.count} />
+        <input class="input num" type="text" use:numeric={{ max: 999 }} value={value.count ?? ''} oninput={(e) => value && (value.count = toNum(e.currentTarget.value))} />
         <span class="muted">{t('rep.times')}</span>
       {/if}
     </div>

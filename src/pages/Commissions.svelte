@@ -22,6 +22,7 @@
   import { currencySymbol, expenseSettings, fmtMoney, loadExpenseSettings } from '../lib/expenses.svelte';
   import { imageUrl } from '../lib/images';
   import { t } from '../lib/i18n.svelte';
+  import { numeric, toNum } from '../lib/numberInput';
   import { openMenu, type MenuItem } from '../lib/menu.svelte';
   import { data, load, mutate, toast } from '../lib/state.svelte';
 
@@ -542,7 +543,7 @@
         <label for="cm-revisions">{t('cm.revisions')}</label>
         <div class="stepper">
           <button type="button" onclick={() => editing && setRevisions(editing.revisions - 1)} disabled={editing.revisions <= 0} aria-label={t('pomo.decrease')}><Minus size={14} /></button>
-          <input id="cm-revisions" class="tabular" type="number" min="0" max="999" value={editing.revisions} oninput={(e) => setRevisions(Number(e.currentTarget.value))} />
+          <input id="cm-revisions" class="tabular" type="text" use:numeric={{ max: 999 }} value={editing.revisions} oninput={(e) => setRevisions(Number(e.currentTarget.value))} />
           <span class="unit">{t('trpg.playUnit')}</span>
           <button type="button" onclick={() => editing && setRevisions(editing.revisions + 1)} aria-label={t('pomo.increase')}><Plus size={14} /></button>
         </div>
@@ -554,7 +555,8 @@
         <label for="cm-price">{t('cm.price')}</label>
         <div class="money">
           <span class="symbol">{currencySymbol()}</span>
-          <input id="cm-price" class="tabular" type="number" inputmode="decimal" min="0" step="any" placeholder="0" bind:value={editing.price} />
+          <input id="cm-price" class="tabular" type="text" use:numeric={{ decimal: true }} placeholder="0" value={editing.price ?? ''}
+            oninput={(e) => editing && (editing.price = toNum(e.currentTarget.value))} />
         </div>
       </div>
       <div class="fee-row">
@@ -569,7 +571,8 @@
           <div class="fee-input">
             <div class="money small-money">
               {#if editing.fee_kind === 'amount'}<span class="symbol">{currencySymbol()}</span>{/if}
-              <input id="cm-fee" class="tabular" type="number" inputmode="decimal" min="0" step="any" placeholder="0" bind:value={editing.fee} />
+              <input id="cm-fee" class="tabular" type="text" use:numeric={{ decimal: true }} placeholder="0" value={editing.fee ?? ''}
+                oninput={(e) => editing && (editing.fee = toNum(e.currentTarget.value))} />
               {#if editing.fee_kind === 'percent'}<span class="symbol">%</span>{/if}
             </div>
             <div class="segmented fee-kind">
@@ -602,8 +605,8 @@
           <div class="pay-date"><DateField value={payDate} label={t('common.date')} onchange={(v) => v && (payDate = v)} /></div>
           <div class="money small-money">
             <span class="symbol">{currencySymbol()}</span>
-            <input class="tabular" type="number" inputmode="decimal" min="0" step="any" placeholder="0" bind:value={payAmount}
-              onkeydown={(e) => e.key === 'Enter' && addPayment()} aria-label={t('ex.amount')} />
+            <input class="tabular" type="text" use:numeric={{ decimal: true }} placeholder="0" bind:value={payAmount}
+              onkeydown={(e) => e.key === 'Enter' && !e.isComposing && addPayment()} aria-label={t('ex.amount')} />
           </div>
           <button class="btn" onclick={() => addPayment()}><Plus size={15} /> {t('cm.addPayment')}</button>
         </div>
@@ -1078,11 +1081,6 @@
     margin-right: 4px;
     font-size: 13px;
     color: var(--muted);
-  }
-  input[type='number']::-webkit-inner-spin-button,
-  input[type='number']::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
   }
   .money-box {
     display: flex;

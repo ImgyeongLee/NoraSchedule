@@ -4,6 +4,7 @@
   import { BASE_PRESETS, MAX_SECONDS, fmtLength, timer } from '../lib/timer.svelte';
   import { playChime } from '../lib/reminders';
   import { t } from '../lib/i18n.svelte';
+  import { numeric } from '../lib/numberInput';
 
   onMount(() => {
     timer.load();
@@ -94,11 +95,11 @@
         <div class="custom">
           <span class="faint small">{t('timer.typeTime')}</span>
           <div class="time-input">
-            <input class="input tabular" type="number" inputmode="numeric" min="0" max="1440" placeholder="0" bind:value={minutes}
-              onkeydown={(e) => e.key === 'Enter' && applyTyped()} aria-label={t('timer.minutes')} />
+            <input class="input tabular" type="text" use:numeric={{ max: 1440 }} placeholder="0" bind:value={minutes}
+              onkeydown={(e) => e.key === 'Enter' && !e.isComposing && applyTyped()} aria-label={t('timer.minutes')} />
             <span class="unit">{t('timer.minUnit')}</span>
-            <input class="input tabular" type="number" inputmode="numeric" min="0" max="59" placeholder="0" bind:value={seconds}
-              onkeydown={(e) => e.key === 'Enter' && applyTyped()} aria-label={t('timer.seconds')} />
+            <input class="input tabular" type="text" use:numeric={{ max: 59 }} placeholder="0" bind:value={seconds}
+              onkeydown={(e) => e.key === 'Enter' && !e.isComposing && applyTyped()} aria-label={t('timer.seconds')} />
             <span class="unit">{t('timer.secUnit')}</span>
             <button class="btn" onclick={applyTyped} disabled={!(Number(minutes) > 0 || Number(seconds) > 0)}>{t('timer.set')}</button>
           </div>
@@ -311,11 +312,6 @@
   }
   .save-preset {
     align-self: flex-start;
-  }
-  input[type='number']::-webkit-inner-spin-button,
-  input[type='number']::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
   }
   .setting {
     display: flex;

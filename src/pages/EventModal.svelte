@@ -18,6 +18,7 @@
   import { addMinutes, dateOf, timeOf, toDateTime } from '../lib/dates';
   import { mutate } from '../lib/state.svelte';
   import { t } from '../lib/i18n.svelte';
+  import { numeric, toNum } from '../lib/numberInput';
 
   let { event, onclose }: { event: CalEvent; onclose: () => void } = $props();
 
@@ -185,7 +186,7 @@
         />
       </div>
       {#if customReminder}
-        <input class="input minutes" type="number" min="1" max={MAX_REMINDER_MINUTES} bind:value={form.reminder} />
+        <input class="input minutes" type="text" use:numeric={{ max: MAX_REMINDER_MINUTES }} value={form.reminder ?? ''} oninput={(e) => (form.reminder = toNum(e.currentTarget.value))} />
         <span class="muted">{t('remind.minutesBefore')}</span>
       {/if}
     </div>
