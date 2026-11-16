@@ -77,7 +77,10 @@ CREATE TABLE IF NOT EXISTS routines (
     weekdays   TEXT    NOT NULL DEFAULT '[]',
     active     INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    last_made  TEXT
+    last_made  TEXT,
+    freq       TEXT    NOT NULL DEFAULT 'weekly',
+    month_days TEXT    NOT NULL DEFAULT '[]',
+    start      TEXT
 );
 
 CREATE TABLE IF NOT EXISTS memo_groups (
@@ -205,6 +208,53 @@ CREATE TABLE IF NOT EXISTS workouts (
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_workouts_date ON workouts(date);
+
+CREATE TABLE IF NOT EXISTS medications (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT    NOT NULL,
+    dose       TEXT    NOT NULL DEFAULT '',
+    times      TEXT    NOT NULL DEFAULT '[]',
+    as_needed  INTEGER NOT NULL DEFAULT 0,
+    color      INTEGER NOT NULL DEFAULT 0,
+    note       TEXT    NOT NULL DEFAULT '',
+    start      TEXT,
+    end_date   TEXT,
+    active     INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS med_logs (
+    id       INTEGER PRIMARY KEY,
+    med_id   INTEGER NOT NULL REFERENCES medications(id) ON DELETE CASCADE,
+    date     TEXT    NOT NULL,
+    slot     TEXT    NOT NULL DEFAULT '',
+    taken_at INTEGER NOT NULL,
+    UNIQUE(med_id, date, slot)
+);
+CREATE INDEX IF NOT EXISTS idx_med_logs_date ON med_logs(date);
+
+CREATE TABLE IF NOT EXISTS sleep_logs (
+    id          INTEGER PRIMARY KEY,
+    date        TEXT    NOT NULL UNIQUE,
+    bed         TEXT    NOT NULL,
+    wake        TEXT    NOT NULL,
+    quality     INTEGER NOT NULL DEFAULT 0,
+    wakeups     INTEGER NOT NULL DEFAULT 0,
+    nap_minutes INTEGER NOT NULL DEFAULT 0,
+    note        TEXT    NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conditions (
+    id         INTEGER PRIMARY KEY,
+    date       TEXT    NOT NULL UNIQUE,
+    mood       INTEGER NOT NULL DEFAULT 0,
+    energy     INTEGER NOT NULL DEFAULT 0,
+    stress     INTEGER NOT NULL DEFAULT 0,
+    tags       TEXT    NOT NULL DEFAULT '[]',
+    note       TEXT    NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS commission_clients (
     id      INTEGER PRIMARY KEY,
@@ -681,6 +731,17 @@ fn migrate(conn: &Connection) -> DbResult<()> {
             "ALTER TABLE commissions ADD COLUMN platform TEXT NOT NULL DEFAULT '';
              ALTER TABLE commissions ADD COLUMN fee_kind TEXT NOT NULL DEFAULT 'percent';
              ALTER TABLE commissions ADD COLUMN fee REAL NOT NULL DEFAULT 0;",
+        )?;
+    }
+    // Routines every other week or every month.
+    let has_routine_freq = conn
+        .prepare("SELECT 1 FROM pragma_table_info('routines') WHERE name = 'freq'")?
+        .exists([])?;
+    if !has_routine_freq {
+        conn.execute_batch(
+            "ALTER TABLE routines ADD COLUMN freq TEXT NOT NULL DEFAULT 'weekly';
+             ALTER TABLE routines ADD COLUMN month_days TEXT NOT NULL DEFAULT '[]';
+             ALTER TABLE routines ADD COLUMN start TEXT;",
         )?;
     }
     Ok(())

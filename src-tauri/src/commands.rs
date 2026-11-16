@@ -13,6 +13,7 @@ use crate::diary::DiaryEntry;
 use crate::expenses::Expense;
 use crate::routines::Routine;
 use crate::health::{self, Meal, Workout};
+use crate::wellness::{self, Condition, MedLog, Medication, SleepLog};
 use crate::db::{ActivitySummary, Activity, DDay, Event, Memo, MemoGroup, PomodoroSession, Scope, Tag, Todo, TodoGroup};
 use crate::tracker::{TrackerSettings, TrackerStatus};
 use crate::reading::Book;
@@ -659,6 +660,86 @@ pub fn save_workout(state: State<AppState>, workout: Workout) -> CmdResult<i64> 
 #[tauri::command]
 pub fn delete_workout(state: State<AppState>, id: i64) -> CmdResult<Option<Workout>> {
     with_db(&state, |db| db.delete_workout(id))
+}
+
+// ---- medicines, sleep and how the day felt -------------------------------------------
+
+#[tauri::command]
+pub fn medications(state: State<AppState>) -> CmdResult<Vec<Medication>> {
+    with_db(&state, |db| db.medications())
+}
+
+#[tauri::command]
+pub fn save_medication(state: State<AppState>, medication: Medication) -> CmdResult<i64> {
+    let name = medication.name.trim();
+    if name.is_empty() {
+        return Err("name required".into());
+    }
+    if let (Some(start), Some(end)) = (medication.start, medication.end) {
+        if end < start {
+            return Err("the end date is before the start date".into());
+        }
+    }
+    let medication = Medication {
+        name: name.into(),
+        dose: medication.dose.trim().into(),
+        note: medication.note.trim().into(),
+        ..medication
+    };
+    with_db(&state, |db| db.save_medication(&medication))
+}
+
+#[tauri::command]
+pub fn delete_medication(state: State<AppState>, id: i64) -> CmdResult<()> {
+    with_db(&state, |db| db.delete_medication(id))
+}
+
+#[tauri::command]
+pub fn med_logs_between(state: State<AppState>, from: NaiveDate, to: NaiveDate) -> CmdResult<Vec<MedLog>> {
+    with_db(&state, |db| db.med_logs_between(from, to))
+}
+
+#[tauri::command]
+pub fn set_med_taken(state: State<AppState>, med_id: i64, date: NaiveDate, slot: String, taken: bool) -> CmdResult<()> {
+    let slot = if slot.is_empty() { slot } else { crate::db::normalize_time(&slot).ok_or("invalid time")? };
+    with_db(&state, |db| db.set_med_taken(med_id, date, &slot, taken))
+}
+
+#[tauri::command]
+pub fn sleep_between(state: State<AppState>, from: NaiveDate, to: NaiveDate) -> CmdResult<Vec<SleepLog>> {
+    with_db(&state, |db| db.sleep_between(from, to))
+}
+
+#[tauri::command]
+pub fn save_sleep(state: State<AppState>, sleep: SleepLog) -> CmdResult<i64> {
+    let (Some(bed), Some(wake)) = (crate::db::normalize_time(&sleep.bed), crate::db::normalize_time(&sleep.wake)) else {
+        return Err("invalid time".into());
+    };
+    if !(0..=5).contains(&sleep.quality)
+        || !(0..=wellness::MAX_WAKEUPS).contains(&sleep.wakeups)
+        || !(0..=wellness::MAX_NAP_MINUTES).contains(&sleep.nap_minutes)
+    {
+        return Err("invalid sleep record".into());
+    }
+    with_db(&state, |db| db.save_sleep(&SleepLog { bed, wake, note: sleep.note.trim().into(), ..sleep }))
+}
+
+#[tauri::command]
+pub fn delete_sleep(state: State<AppState>, id: i64) -> CmdResult<Option<SleepLog>> {
+    with_db(&state, |db| db.delete_sleep(id))
+}
+
+#[tauri::command]
+pub fn conditions_between(state: State<AppState>, from: NaiveDate, to: NaiveDate) -> CmdResult<Vec<Condition>> {
+    with_db(&state, |db| db.conditions_between(from, to))
+}
+
+#[tauri::command]
+pub fn save_condition(state: State<AppState>, condition: Condition) -> CmdResult<i64> {
+    if [condition.mood, condition.energy, condition.stress].iter().any(|n| !(0..=5).contains(n)) {
+        return Err("invalid condition".into());
+    }
+    with_db(&state, |db| db.save_condition(&condition))
 }
 
 // ---- backup, restore and reset -----------------------------------------------------

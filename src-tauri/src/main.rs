@@ -17,6 +17,7 @@ mod routines;
 mod tracker;
 mod updates;
 mod trpg;
+mod wellness;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -146,6 +147,16 @@ fn main() {
             commands::workouts_between,
             commands::save_workout,
             commands::delete_workout,
+            commands::medications,
+            commands::save_medication,
+            commands::delete_medication,
+            commands::med_logs_between,
+            commands::set_med_taken,
+            commands::sleep_between,
+            commands::save_sleep,
+            commands::delete_sleep,
+            commands::conditions_between,
+            commands::save_condition,
             commands::trpg_entries,
             commands::save_trpg_entry,
             commands::delete_trpg_entry,

@@ -2,7 +2,7 @@
 // Turning a page off only hides it from the sidebar; its data stays in the database.
 import type { Component } from 'svelte';
 import {
-  Activity, AlarmClock, Bookmark, BookHeart, BookOpenText, Brush, CalendarDays, ChartColumn, Dices, House, ListTodo, NotebookPen, Salad, Target, Timer, Wallet,
+  Activity, AlarmClock, Bookmark, BookHeart, BookOpenText, Brush, CalendarDays, ChartColumn, Dices, HeartPulse, House, ListTodo, NotebookPen, Target, Timer, Wallet,
 } from '@lucide/svelte';
 import { api } from './api';
 import type { Key } from './i18n.svelte';
@@ -22,7 +22,7 @@ export const PAGES: { id: NavPage; label: Key; icon: Component<{ size?: number }
   { id: 'bookmarks', label: 'nav.bookmarks', icon: Bookmark },
   { id: 'expenses', label: 'nav.expenses', icon: Wallet },
   { id: 'commissions', label: 'nav.commissions', icon: Brush },
-  { id: 'health', label: 'nav.health', icon: Salad },
+  { id: 'health', label: 'nav.health', icon: HeartPulse },
   { id: 'reading', label: 'nav.reading', icon: BookOpenText },
   { id: 'trpg', label: 'nav.trpg', icon: Dices },
   { id: 'tracking', label: 'nav.tracking', icon: Activity },

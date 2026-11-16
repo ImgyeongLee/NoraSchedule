@@ -106,15 +106,23 @@ export interface Todo {
   routine_id?: number | null;
 }
 
+export type RoutineFreq = 'weekly' | 'biweekly' | 'monthly';
+
 export interface Routine {
   id: number;
   title: string;
   group_id: number | null;
-  /** Days it repeats on, 0 = Sunday … 6 = Saturday; empty means every day. */
+  /** Days it repeats on, 0 = Sunday … 6 = Saturday; empty means every day (weekly and biweekly). */
   weekdays: number[];
   /** Paused routines are kept but not added. */
   active: boolean;
   created_at: number;
+  /** Every week, every other week (counted from the week of `start`) or every month. */
+  freq: RoutineFreq;
+  /** Monthly: days of the month, 1–31; days a month doesn't have fall on its last day. */
+  month_days: number[];
+  /** Biweekly: any day in the first week. */
+  start: DateStr | null;
 }
 
 export interface BookmarkFolder {
@@ -240,6 +248,61 @@ export interface Workout {
   minutes: number;
   /** Calories burned: the estimate when it was saved, or the user's own number. */
   kcal: number;
+  note: string;
+}
+
+/** A medicine (or supplement) and when to take it. */
+export interface Medication {
+  id: number;
+  name: string;
+  /** Free text: "1 tablet", "500 mg". */
+  dose: string;
+  /** Times to take it each day, `HH:MM`; empty means once a day at no set time. */
+  times: string[];
+  /** Taken only when needed: no schedule, each time taken is logged. */
+  as_needed: boolean;
+  color: number;
+  note: string;
+  /** Only scheduled from `start` to `end` (both optional). */
+  start: DateStr | null;
+  end: DateStr | null;
+  /** Stopped medicines keep their records but are no longer scheduled. */
+  active: boolean;
+  created_at: number;
+}
+
+/** One dose taken. */
+export interface MedLog {
+  id: number;
+  med_id: number;
+  date: DateStr;
+  /** The scheduled time (`HH:MM`, or '' for no set time); for as-needed medicines, when it was taken. */
+  slot: string;
+  taken_at: number;
+}
+
+/** One night's sleep, filed under the day you woke up. */
+export interface SleepLog {
+  id: number;
+  date: DateStr;
+  bed: string;
+  wake: string;
+  /** 1–5, or 0 when not rated. */
+  quality: number;
+  wakeups: number;
+  nap_minutes: number;
+  note: string;
+}
+
+/** How a day felt. Scores are 1–5, or 0 when not picked. */
+export interface Condition {
+  id: number;
+  date: DateStr;
+  mood: number;
+  energy: number;
+  stress: number;
+  /** Preset ids ("tired", "appetite_down") or the user's own words. */
+  tags: string[];
   note: string;
 }
 
@@ -440,6 +503,19 @@ export const api = {
   commissionClients: () => invoke<CommissionClient[]>('commission_clients'),
   saveCommissionClient: (client: CommissionClient) => invoke<number>('save_commission_client', { client }),
   deleteCommissionClient: (id: number) => invoke<void>('delete_commission_client', { id }),
+
+  medications: () => invoke<Medication[]>('medications'),
+  saveMedication: (medication: Medication) => invoke<number>('save_medication', { medication }),
+  deleteMedication: (id: number) => invoke<void>('delete_medication', { id }),
+  medLogsBetween: (from: DateStr, to: DateStr) => invoke<MedLog[]>('med_logs_between', { from, to }),
+  setMedTaken: (medId: number, date: DateStr, slot: string, taken: boolean) => invoke<void>('set_med_taken', { medId, date, slot, taken }),
+  sleepBetween: (from: DateStr, to: DateStr) => invoke<SleepLog[]>('sleep_between', { from, to }),
+  /** One night per date: saving another for the same date replaces it. */
+  saveSleep: (sleep: SleepLog) => invoke<number>('save_sleep', { sleep }),
+  deleteSleep: (id: number) => invoke<SleepLog | null>('delete_sleep', { id }),
+  conditionsBetween: (from: DateStr, to: DateStr) => invoke<Condition[]>('conditions_between', { from, to }),
+  /** One record per date; an empty one is removed instead (returns 0). */
+  saveCondition: (condition: Condition) => invoke<number>('save_condition', { condition }),
 
   mealsBetween: (from: DateStr, to: DateStr) => invoke<Meal[]>('meals_between', { from, to }),
   saveMeal: (meal: Meal) => invoke<number>('save_meal', { meal }),

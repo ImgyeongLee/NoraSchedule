@@ -2,8 +2,9 @@
 // Loaded from main.ts only when `import.meta.env.DEV` and Tauri is absent.
 // Supports `?page=todos&theme=dark` to open a specific page.
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import type { Routine, Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Commission, CommissionClient, DiaryEntry, Expense, Meal, Memo, MemoGroup, Workout, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
+import type { Condition, Medication, MedLog, SleepLog, Routine, Activity, Bookmark, BookmarkFolder, CalEvent, DDay, Commission, CommissionClient, DiaryEntry, Expense, Meal, Memo, MemoGroup, Workout, PomodoroSession, Tag, Todo, TodoGroup, TrpgEntry, Book } from './api';
 import { addDays, addMinutes, addMonths, dayStartTs, diffDays, eventSpan, parseYmd, timeOf, today, toDateTime } from './dates';
+import { routineDue } from './routines';
 
 /** Mirrors src-tauri/src/recurrence.rs (dev preview only). */
 function occurrences(first: string, r: NonNullable<CalEvent['repeat']>, from: string, to: string): string[] {
@@ -82,16 +83,17 @@ export function installMock() {
     created_at: now - (id % 5) * 86_400, completed_at: done ? now - (id % 3) * 86_400 : null,
   });
   const routines: (Routine & { last_made?: string })[] = [
-    { id: 9000, title: '아침에 물 한 잔 마시기', group_id: null, weekdays: [], active: true, created_at: now - 86_400 * 10 },
-    { id: 9001, title: '스트레칭 10분', group_id: 2, weekdays: [1, 3, 5], active: true, created_at: now - 86_400 * 5 },
+    { id: 9000, title: '아침에 물 한 잔 마시기', group_id: null, weekdays: [], active: true, created_at: now - 86_400 * 10, freq: 'weekly', month_days: [], start: null },
+    { id: 9001, title: '스트레칭 10분', group_id: 2, weekdays: [1, 3, 5], active: true, created_at: now - 86_400 * 5, freq: 'weekly', month_days: [], start: null },
+    { id: 9002, title: '분리수거', group_id: null, weekdays: [3], active: true, created_at: now - 86_400 * 5, freq: 'biweekly', month_days: [], start: t },
+    { id: 9003, title: '월세 이체', group_id: null, weekdays: [], active: true, created_at: now - 86_400 * 5, freq: 'monthly', month_days: [25], start: null },
   ];
   /** Same rules as routines.rs: today's copies, once a day; unticked old copies are cleared. */
   const materialize = () => {
     const day = today();
-    const wd = parseYmd(day).getDay();
     for (let i = todos.length - 1; i >= 0; i--) if (todos[i].routine_id && !todos[i].done && todos[i].due! < day) todos.splice(i, 1);
     for (const r of routines) {
-      if (!r.active || (r.weekdays.length && !r.weekdays.includes(wd)) || (r.last_made ?? '') >= day) continue;
+      if (!routineDue(r, day) || (r.last_made ?? '') >= day) continue;
       todos.push({ ...todo(nextId++, r.title, r.group_id, null, false, day), routine_id: r.id });
       r.last_made = day;
     }
@@ -173,6 +175,19 @@ export function installMock() {
   ];
   const meals: Meal[] = [];
   const workouts: Workout[] = [];
+  const medications: Medication[] = [
+    { id: 9100, name: '비타민 D', dose: '1정', times: ['08:00'], as_needed: false, color: 0xf5b83d, note: '식후', start: null, end: null, active: true, created_at: now },
+    { id: 9101, name: '유산균', dose: '1포', times: ['08:00', '21:00'], as_needed: false, color: 0x34c38f, note: '', start: null, end: null, active: true, created_at: now },
+    { id: 9102, name: '타이레놀', dose: '500mg', times: [], as_needed: true, color: 0xef5d6c, note: '', start: null, end: null, active: true, created_at: now },
+  ];
+  const medLogs: MedLog[] = [{ id: 9110, med_id: 9100, date: addDays(t, -1), slot: '08:00', taken_at: now }];
+  const sleepLogs: SleepLog[] = [
+    { id: 9120, date: addDays(t, -1), bed: '00:30', wake: '07:40', quality: 3, wakeups: 1, nap_minutes: 0, note: '' },
+    { id: 9121, date: addDays(t, -2), bed: '23:10', wake: '07:00', quality: 4, wakeups: 0, nap_minutes: 20, note: '' },
+  ];
+  const conditions: Condition[] = [
+    { id: 9130, date: addDays(t, -1), mood: 2, energy: 2, stress: 4, tags: ['tired', 'appetite_down', '마감 스트레스'], note: '' },
+  ];
   const foods: [Meal['slot'], string, number][] = [
     ['breakfast', 'Greek yogurt & granola', 320], ['breakfast', '아메리카노', 10], ['lunch', '김밥', 450],
     ['lunch', 'Chicken salad', 420], ['dinner', '된장찌개 & 밥', 620], ['snack', 'Banana', 105], ['dinner', 'Salmon bowl', 680],
@@ -295,6 +310,8 @@ export function installMock() {
       case 'routines': return routines;
       case 'save_routine': {
         const r = a.routine as Routine;
+        if (r.freq === 'biweekly' && !r.start) r.start = today();
+        if (r.freq === 'monthly' && !r.month_days.length) r.month_days = [parseYmd(today()).getDate()];
         if (r.id) { Object.assign(routines.find((x) => x.id === r.id)!, r); todos.forEach((x) => x.routine_id === r.id && !x.done && Object.assign(x, { title: r.title, group_id: r.group_id })); return r.id; }
         routines.push({ ...r, id: nextId, created_at: now }); return nextId++;
       }
@@ -413,6 +430,41 @@ export function installMock() {
         workouts.push({ ...a.workout, id: nextId }); return nextId++;
       }
       case 'delete_workout': { const i = workouts.findIndex((w) => w.id === a.id); return i < 0 ? null : workouts.splice(i, 1)[0]; }
+      case 'medications': return [...medications].sort((x, y) => Number(y.active) - Number(x.active) || x.id - y.id);
+      case 'save_medication': {
+        const m = { ...a.medication, times: [...new Set<string>(a.medication.times)].sort() } as Medication;
+        if (m.id) { Object.assign(medications.find((x) => x.id === m.id)!, m); return m.id; }
+        medications.push({ ...m, id: nextId, created_at: now }); return nextId++;
+      }
+      case 'delete_medication': {
+        for (let i = medLogs.length - 1; i >= 0; i--) if (medLogs[i].med_id === a.id) medLogs.splice(i, 1);
+        medications.splice(medications.findIndex((x) => x.id === a.id), 1); return null;
+      }
+      case 'med_logs_between': return medLogs.filter((l) => l.date >= a.from && l.date <= a.to);
+      case 'set_med_taken': {
+        const i = medLogs.findIndex((l) => l.med_id === a.medId && l.date === a.date && l.slot === a.slot);
+        if (a.taken && i < 0) medLogs.push({ id: nextId++, med_id: a.medId, date: a.date, slot: a.slot, taken_at: now });
+        if (!a.taken && i >= 0) medLogs.splice(i, 1);
+        return null;
+      }
+      case 'sleep_between': return sleepLogs.filter((x) => x.date >= a.from && x.date <= a.to).sort((x, y) => x.date.localeCompare(y.date));
+      case 'save_sleep': {
+        const s = a.sleep as SleepLog;
+        const same = sleepLogs.findIndex((x) => x.date === s.date && x.id !== s.id);
+        if (same >= 0) sleepLogs.splice(same, 1);
+        const mine = sleepLogs.find((x) => x.id === s.id);
+        if (s.id && mine) { Object.assign(mine, s); return s.id; }
+        sleepLogs.push({ ...s, id: nextId }); return nextId++;
+      }
+      case 'delete_sleep': { const i = sleepLogs.findIndex((x) => x.id === a.id); return i < 0 ? null : sleepLogs.splice(i, 1)[0]; }
+      case 'conditions_between': return conditions.filter((x) => x.date >= a.from && x.date <= a.to).sort((x, y) => x.date.localeCompare(y.date));
+      case 'save_condition': {
+        const c = a.condition as Condition;
+        const i = conditions.findIndex((x) => x.date === c.date);
+        if (!c.mood && !c.energy && !c.stress && !c.tags.length && !c.note.trim()) { if (i >= 0) conditions.splice(i, 1); return 0; }
+        if (i >= 0) { Object.assign(conditions[i], { ...c, id: conditions[i].id }); return conditions[i].id; }
+        conditions.push({ ...c, id: nextId }); return nextId++;
+      }
       case 'trpg_entries': return [...trpg].sort((x, y) => x.kind.localeCompare(y.kind) || (y.date ?? '').localeCompare(x.date ?? '') || y.created_at - x.created_at);
       case 'save_trpg_entry': {
         if (a.entry.id) { Object.assign(trpg.find((e) => e.id === a.entry.id)!, a.entry); return a.entry.id; }
@@ -427,7 +479,7 @@ export function installMock() {
         books.push({ ...a.book, id: nextId, created_at: a.book.created_at || Math.floor(Date.now() / 1000) }); return nextId++;
       }
       case 'delete_book': { const i = books.findIndex((b) => b.id === a.id); return i < 0 ? null : books.splice(i, 1)[0]; }
-      case 'plugin:app|version': return '0.7.1';
+      case 'plugin:app|version': return '0.7.2';
       case 'latest_release': return { version: '0.8.0', url: 'https://github.com/ImgyeongLee/NoraSchedule/releases/tag/v0.8.0' };
       case 'plugin:dialog|save': return '/Users/you/Documents/Nora-backup.nora';
       case 'plugin:dialog|open': return '/Users/you/Documents/Nora-backup.nora';

@@ -1,7 +1,8 @@
 <script lang="ts">
   import Select from '../components/Select.svelte';
-  import { FolderPlus, Inbox, Layers, PartyPopper, Pencil, Plus, Repeat, Sparkles, Sun } from '@lucide/svelte';
+  import { Columns3, FolderPlus, Inbox, Layers, List, PartyPopper, Pencil, Plus, Repeat, Sparkles, Sun } from '@lucide/svelte';
   import RoutineManager from '../components/RoutineManager.svelte';
+  import TodoBoard from '../components/TodoBoard.svelte';
   import TodoItem from './TodoItem.svelte';
   import Modal from '../components/Modal.svelte';
   import ColorPicker from '../components/ColorPicker.svelte';
@@ -36,6 +37,27 @@
       /* not remembered; fine */
     }
   });
+  // "All" as one list, or one column per group side by side; remembered in this browser.
+  type Layout = 'list' | 'board';
+  const LAYOUT_KEY = 'nora.todos.layout';
+  function readLayout(): Layout {
+    try {
+      return localStorage.getItem(LAYOUT_KEY) === 'board' ? 'board' : 'list';
+    } catch {
+      return 'list';
+    }
+  }
+  let layout = $state<Layout>(readLayout());
+  $effect(() => {
+    const value = layout;
+    try {
+      localStorage.setItem(LAYOUT_KEY, value);
+    } catch {
+      /* not remembered; fine */
+    }
+  });
+  const board = $derived(layout === 'board' && filter === 'all');
+
   let todos = $state<Todo[]>([]);
   let groups = $state<TodoGroup[]>([]);
   let newTitle = $state('');
@@ -108,12 +130,15 @@
     editing = null;
   }
 
+  const newGroup = () => (editingGroup = { id: 0, name: '', color: PALETTE[groups.length % PALETTE.length].value });
+
   async function saveGroup() {
     if (!editingGroup || !editingGroup.name.trim()) return;
     const g = { ...editingGroup, name: editingGroup.name.trim() };
     if (g.id === 0) {
       const id = await mutate(api.addTodoGroup(g.name, g.color), t('todo.groupCreated'));
-      if (id !== undefined) filter = id;
+      // On the board the new group just shows up as a new column.
+      if (id !== undefined && !board) filter = id;
     } else {
       await mutate(api.updateTodoGroup(g), t('todo.groupSaved'));
     }
@@ -157,7 +182,7 @@
           <button class="icon-btn edit-group" onclick={() => (editingGroup = { ...g })} title={t('todo.editGroup')}><Pencil size={14} /></button>
         </div>
       {/each}
-      <button class="group add" onclick={() => (editingGroup = { id: 0, name: '', color: PALETTE[groups.length % PALETTE.length].value })}>
+      <button class="group add" onclick={newGroup}>
         <FolderPlus size={17} /> <span>{t('todo.newGroup')}</span>
       </button>
     </div>
@@ -176,7 +201,17 @@
       <label class="row show-done">
         <input type="checkbox" class="switch" bind:checked={showDone} /> {t('todo.showCompleted')}
       </label>
+      {#if filter === 'all'}
+        <div class="segmented layout-pick" role="group" aria-label={t('todo.layout')}>
+          <button class:active={layout === 'list'} onclick={() => (layout = 'list')} title={t('todo.layoutList')}><List size={15} /> {t('todo.layoutList')}</button>
+          <button class:active={layout === 'board'} onclick={() => (layout = 'board')} title={t('todo.layoutBoard')}><Columns3 size={15} /> {t('todo.layoutBoard')}</button>
+        </div>
+      {/if}
     </div>
+    {#if board}
+      <TodoBoard {todos} {groups} {children} {showDone} onedit={(x) => (editing = { ...x })} oneditgroup={(g) => (editingGroup = { ...g })} onnewgroup={newGroup} />
+      <p class="faint small hint">{t('todo.boardTip')}</p>
+    {:else}
     {#if roots.length}
       <div class="progress"><div style:width="{(doneCount / roots.length) * 100}%"></div></div>
     {/if}
@@ -212,6 +247,7 @@
       {/each}
     </div>
     <p class="faint small hint">{t('todo.tip')}</p>
+    {/if}
     {/if}
   </section>
 </div>
@@ -350,6 +386,9 @@
   }
   .heading {
     font-size: 22px;
+  }
+  .layout-pick button {
+    gap: 5px;
   }
   .show-done {
     color: var(--muted);

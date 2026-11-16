@@ -21,6 +21,7 @@
     showDone,
     showGroup,
     depth = 0,
+    compact = false,
     onedit,
   }: {
     todo: Todo;
@@ -29,6 +30,8 @@
     showDone: boolean;
     showGroup: boolean;
     depth?: number;
+    /** Narrow places (a board column): the title gets the room and the buttons show on hover. */
+    compact?: boolean;
     onedit: (t: Todo) => void;
   } = $props();
 
@@ -69,7 +72,7 @@
   }
 </script>
 
-<div class="item" style:--depth={depth} transition:slide={{ duration: 160 }}>
+<div class="item" class:compact style:--depth={depth} transition:slide={{ duration: 160 }}>
   <div
     class="row-main"
     class:done={todo.done}
@@ -132,7 +135,7 @@
 
   {#if open}
     {#each visibleKids as kid (kid.id)}
-      <TodoItem todo={kid} {children} {groups} {showDone} showGroup={false} depth={depth + 1} {onedit} />
+      <TodoItem todo={kid} {children} {groups} {showDone} showGroup={false} depth={depth + 1} {compact} {onedit} />
     {/each}
   {/if}
 </div>
@@ -214,6 +217,48 @@
   }
   .row-main:hover .actions {
     opacity: 1;
+  }
+  .compact > .row-main {
+    position: relative;
+    gap: 8px;
+    padding-left: calc(4px + var(--depth) * 22px);
+  }
+  .compact > .row-main .title {
+    flex: 1 1 auto;
+  }
+  /* Chips go on their own line under the title. */
+  .compact > .row-main {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .compact > .row-main .title {
+    flex-basis: 0;
+    min-width: 0;
+  }
+  .compact > .row-main .meta {
+    flex: 1 0 100%;
+    flex-wrap: wrap;
+    padding-left: 60px;
+  }
+  .compact > .row-main .meta:not(:has(.chip)) {
+    display: none;
+  }
+  .compact > .row-main .actions {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 2px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+  }
+  .compact > .row-main:hover .actions {
+    pointer-events: auto;
+  }
+  .compact > .add-child {
+    padding-left: calc(40px + var(--depth) * 22px);
   }
   .add-child {
     padding: 4px 8px 8px calc(70px + var(--depth) * 30px);
